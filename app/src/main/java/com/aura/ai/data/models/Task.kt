@@ -11,6 +11,7 @@ data class Task(
     val completedAt: Long? = null,
     val actions: List<AgentAction> = emptyList(),
     val currentActionIndex: Int = 0,
+    val result: TaskResult? = null,
     val error: String? = null
 )
 
@@ -24,12 +25,18 @@ enum class TaskStatus {
 }
 
 data class AgentAction(
+    val id: String = UUID.randomUUID().toString(),
     val type: ActionType,
     val target: String? = null,
     val text: String? = null,
     val x: Float? = null,
     val y: Float? = null,
-    val duration: Long? = null
+    val startX: Float? = null,
+    val startY: Float? = null,
+    val endX: Float? = null,
+    val endY: Float? = null,
+    val duration: Long = 300,
+    val packageName: String? = null
 )
 
 enum class ActionType {
@@ -41,5 +48,13 @@ enum class ActionType {
     RECENTS,
     WAIT,
     SCREENSHOT,
-    OPEN_APP
+    OPEN_APP,
+    FIND_AND_TAP
 }
+
+data class TaskResult(
+    val success: Boolean,
+    val message: String,
+    val screenshotPath: String? = null,
+    val data: Map<String, String> = emptyMap()
+)
