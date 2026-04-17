@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Aura AI</string>
+    <string name="accessibility_service_description">Aura AI uses accessibility to read screen content and perform actions on your behalf</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_agent">Agent</string>
+    <string name="nav_automation">Automation</string>
+    <string name="nav_history">History</string>
+    <string name="nav_settings">Settings</string>
+</resources>
