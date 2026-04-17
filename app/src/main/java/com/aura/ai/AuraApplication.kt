@@ -19,6 +19,14 @@ class AuraApplication : Application(), Configuration.Provider {
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         }
+        
+        // Initialize any app-wide components
+        initializeAppComponents()
+    }
+    
+    private fun initializeAppComponents() {
+        // Setup default preferences if first run
+        // Initialize notification channels
     }
     
     override fun getWorkManagerConfiguration(): Configuration {
