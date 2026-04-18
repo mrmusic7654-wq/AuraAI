@@ -3,15 +3,16 @@ package com.aura.ai.data.local.database
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
-import com.aura.ai.data.local.dao.AutomationRuleDao
-import com.aura.ai.data.local.dao.TaskDao
-import com.aura.ai.data.local.entities.AutomationRuleEntity
-import com.aura.ai.data.local.entities.TaskEntity
+import com.aura.ai.data.local.dao.*
+import com.aura.ai.data.local.entities.*
 
 @Database(
     entities = [
         TaskEntity::class,
-        AutomationRuleEntity::class
+        AutomationRuleEntity::class,
+        AppUsageEntity::class,
+        ScreenElementEntity::class,
+        GitHubRepoEntity::class
     ],
     version = 1,
     exportSchema = false
@@ -20,4 +21,7 @@ import com.aura.ai.data.local.entities.TaskEntity
 abstract class AuraDatabase : RoomDatabase() {
     abstract fun taskDao(): TaskDao
     abstract fun automationRuleDao(): AutomationRuleDao
+    abstract fun appUsageDao(): AppUsageDao
+    abstract fun screenElementDao(): ScreenElementDao
+    abstract fun gitHubRepoDao(): GitHubRepoDao
 }
