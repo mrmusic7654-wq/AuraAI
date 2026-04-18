@@ -1,3 +1,20 @@
-package com.aura.ai.data.local.entities.GitHubRepoEntity
+package com.aura.ai.data.local.entities
 
-// TODO: Implement
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+@Entity(tableName = "github_repos")
+data class GitHubRepoEntity(
+    @PrimaryKey
+    val id: Long,
+    val name: String,
+    val fullName: String,
+    val description: String?,
+    val isPrivate: Boolean,
+    val htmlUrl: String,
+    val cloneUrl: String,
+    val defaultBranch: String,
+    val ownerLogin: String,
+    val ownerAvatarUrl: String,
+    val lastSynced: Long
+)
