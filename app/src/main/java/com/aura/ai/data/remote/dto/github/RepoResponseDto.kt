@@ -3,19 +3,23 @@ package com.aura.ai.data.remote.dto.github
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class PullRequestResponseDto(
+data class RepoResponseDto(
     val id: Long,
-    val number: Int,
-    val title: String,
-    val state: String,
+    val name: String,
+    val full_name: String,
+    val description: String?,
+    val private: Boolean,
     val html_url: String,
-    val created_at: String
+    val clone_url: String,
+    val default_branch: String,
+    val created_at: String,
+    val updated_at: String,
+    val owner: OwnerDto
 )
 
 @Serializable
-data class CreatePullRequestDto(
-    val title: String,
-    val head: String,
-    val base: String,
-    val body: String? = null
+data class OwnerDto(
+    val login: String,
+    val id: Long,
+    val avatar_url: String
 )
