@@ -1,3 +1,11 @@
-package com.aura.ai.data.remote.dto.github.CreateFileRequestDto
+package com.aura.ai.data.remote.dto.github
 
-// TODO: Implement
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class CreateFileRequestDto(
+    val message: String,
+    val content: String,
+    val sha: String? = null,
+    val branch: String? = null
+)
