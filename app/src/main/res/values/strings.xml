@@ -1,9 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Aura AI</string>
-    <string name="accessibility_service_description">Aura AI uses accessibility to read screen content and perform actions on your behalf</string>
+    <string name="accessibility_service_description">Aura AI needs accessibility permission to read screen content and perform actions like tapping, swiping, and typing on your behalf.</string>
+    
+    <!-- Navigation -->
     <string name="nav_home">Home</string>
     <string name="nav_agent">Agent</string>
     <string name="nav_automation">Automation</string>
     <string name="nav_history">History</string>
     <string name="nav_settings">Settings</string>
+    
+    <!-- Agent Screen -->
+    <string name="agent_hint">Tell Aura what to do...</string>
+    <string name="agent_send">Send</string>
+    <string name="agent_stop">Stop</string>
+    
+    <!-- Permissions -->
+    <string name="permission_accessibility_required">Accessibility Service Required</string>
+    <string name="permission_accessibility_enable">Enable</string>
+    
+    <!-- Settings -->
+    <string name="settings_api_key">Gemini API Key</string>
+    <string name="settings_api_key_set">API Key Set</string>
+    <string name="settings_api_key_missing">No API Key Set</string>
+    <string name="settings_permissions">Permissions</string>
+    <string name="settings_accessibility">Accessibility Settings</string>
+    <string name="settings_overlay">Overlay Permission</string>
+    <string name="settings_data">Data Management</string>
+    <string name="settings_export">Export Data</string>
+    <string name="settings_about">About</string>
 </resources>
