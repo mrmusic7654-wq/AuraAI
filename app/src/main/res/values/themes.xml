@@ -1,3 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.AuraAI" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.AuraAI" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/aura_purple</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">@color/dark_background</item>
+    </style>
+    
+    <style name="SplashTheme" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/aura_purple</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_aura_logo</item>
+        <item name="postSplashScreenTheme">@style/Theme.AuraAI</item>
+    </style>
 </resources>
