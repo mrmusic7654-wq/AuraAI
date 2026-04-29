@@ -29,9 +29,33 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug
+        id: build
+        continue-on-error: true
+        run: ./gradlew assembleDebug 2>&1 | tee build.log
+
+      - name: Show Errors Summary
+        if: steps.build.outcome == 'failure'
+        run: |
+          echo "========================================"
+          echo "🔴 BUILD FAILED - ERROR SUMMARY"
+          echo "========================================"
+          echo ""
+          echo "Kotlin Compilation Errors:"
+          grep "^e:" build.log || echo "  No Kotlin errors found"
+          echo ""
+          echo "FAILURE Reason:"
+          grep "What went wrong" -A 5 build.log || echo "  Could not find failure reason"
+          echo ""
+          echo "========================================"
+
+      - name: Show Build Success
+        if: steps.build.outcome == 'success'
+        run: |
+          echo "✅ BUILD SUCCESSFUL!"
+          ls -la app/build/outputs/apk/debug/app-debug.apk 2>/dev/null && echo "APK ready!" || echo "APK not found, check path."
 
       - name: Upload APK
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: AuraAI-debug
