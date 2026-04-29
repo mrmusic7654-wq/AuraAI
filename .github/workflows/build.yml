@@ -28,5 +28,5 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Debug APK with detailed logging
-        run: ./gradlew assembleDebug --stacktrace --info
+      - name: Compile Kotlin only (show errors concisely)
+        run: ./gradlew assembleDebug 2>&1 | grep -E "^e:|BUILD FAILED|What went wrong"
