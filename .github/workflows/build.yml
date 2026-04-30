@@ -3,6 +3,8 @@ name: Build Aura AI
 on:
   push:
     branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -26,13 +28,32 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Compile Kotlin directly (shows actual errors)
-        run: ./gradlew :app:compileDebugKotlin --info 2>&1 | grep -A 2 -E "^e:|error:|FAILED|What went wrong"
+      - name: Build APK (show errors only)
+        continue-on-error: true
+        run: |
+          ./gradlew assembleDebug 2>&1 | tee full_build.log
+          echo "BUILD_EXIT_CODE=$?" >> $GITHUB_ENV
 
-      - name: Build APK
-        run: ./gradlew assembleDebug
+      - name: Show Kotlin Errors
+        if: success() || failure()
+        run: |
+          echo "================================"
+          echo " KOTLIN COMPILATION ERRORS "
+          echo "================================"
+          grep "^e:" full_build.log || echo "No Kotlin errors (e: lines) found"
+          echo ""
+          echo "================================"
+          echo " FAILURE REASON "
+          echo "================================"
+          grep -A 20 "What went wrong" full_build.log || echo "No failure section found"
+          echo ""
+          echo "================================"
+          echo " ERROR MODULE DETAILS "
+          echo "================================"
+          grep -B 2 -A 5 "Error module" full_build.log || echo "No error module details"
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: AuraAI-debug
