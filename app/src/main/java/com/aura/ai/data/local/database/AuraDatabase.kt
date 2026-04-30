@@ -3,8 +3,16 @@ package com.aura.ai.data.local.database
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
-import com.aura.ai.data.local.dao.*
-import com.aura.ai.data.local.entities.*
+import com.aura.ai.data.local.dao.AppUsageDao
+import com.aura.ai.data.local.dao.AutomationRuleDao
+import com.aura.ai.data.local.dao.GitHubRepoDao
+import com.aura.ai.data.local.dao.ScreenElementDao
+import com.aura.ai.data.local.dao.TaskDao
+import com.aura.ai.data.local.entities.AppUsageEntity
+import com.aura.ai.data.local.entities.AutomationRuleEntity
+import com.aura.ai.data.local.entities.GitHubRepoEntity
+import com.aura.ai.data.local.entities.ScreenElementEntity
+import com.aura.ai.data.local.entities.TaskEntity
 
 @Database(
     entities = [
