@@ -8,8 +8,8 @@ data class ScreenElementEntity(
     @PrimaryKey
     val elementSignature: String,
     val packageName: String,
-    val elementText: String?,
-    val elementId: String?,
+    val elementText: String? = null,
+    val elementId: String? = null,
     val className: String,
     val bounds: String,
     val lastSeen: Long = System.currentTimeMillis()
