@@ -16,4 +16,20 @@ data class Task(
 
 enum class TaskStatus { PENDING, PLANNING, EXECUTING, PAUSED, RESUMING, COMPLETED, FAILED, CANCELLED }
 
+data class AgentAction(
+    val type: ActionType = ActionType.HOME,
+    val target: String? = null,
+    val text: String? = null,
+    val x: Float? = null,
+    val y: Float? = null,
+    val startX: Float? = null,
+    val startY: Float? = null,
+    val endX: Float? = null,
+    val endY: Float? = null,
+    val duration: Long = 300,
+    val packageName: String? = null
+)
+
+enum class ActionType { TAP, SWIPE, TYPE, BACK, HOME, RECENTS, WAIT, OPEN_APP, FIND_AND_TAP }
+
 data class TaskResult(val success: Boolean = false, val message: String = "")
