@@ -8,34 +8,24 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 class Converters {
-    
+
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
     @TypeConverter
-    fun fromTaskStatus(status: TaskStatus): String {
-        return status.name
-    }
-    
+    fun fromTaskStatus(status: TaskStatus): String = status.name
+
     @TypeConverter
-    fun toTaskStatus(status: String): TaskStatus {
-        return TaskStatus.valueOf(status)
-    }
-    
+    fun toTaskStatus(value: String): TaskStatus = TaskStatus.valueOf(value)
+
     @TypeConverter
-    fun fromActionType(type: ActionType): String {
-        return type.name
-    }
-    
+    fun fromActionType(type: ActionType): String = type.name
+
     @TypeConverter
-    fun toActionType(type: String): ActionType {
-        return ActionType.valueOf(type)
-    }
-    
+    fun toActionType(value: String): ActionType = ActionType.valueOf(value)
+
     @TypeConverter
-    fun fromActionsList(actions: List<AgentAction>): String {
-        return Json.encodeToString(actions)
-    }
-    
+    fun fromActionsList(actions: List<AgentAction>): String = json.encodeToString(actions)
+
     @TypeConverter
-    fun toActionsList(actionsJson: String): List<AgentAction> {
-        return Json.decodeFromString(actionsJson)
-    }
+    fun toActionsList(value: String): List<AgentAction> = json.decodeFromString(value)
 }
