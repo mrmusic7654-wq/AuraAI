@@ -12,9 +12,9 @@ data class TaskEntity(
     val description: String,
     val status: TaskStatus,
     val createdAt: Long,
-    val startedAt: Long?,
-    val completedAt: Long?,
-    val actions: List<AgentAction>,
-    val currentActionIndex: Int,
-    val error: String?
+    val startedAt: Long? = null,
+    val completedAt: Long? = null,
+    val actions: List<AgentAction> = emptyList(),
+    val currentActionIndex: Int = 0,
+    val error: String? = null
 )
