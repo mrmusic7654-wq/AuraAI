@@ -7,31 +7,25 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.aura.ai.data.models.TaskStatus
 
 @Composable
 fun TaskFilterChips(
-    selectedStatus: TaskStatus?,
-    onStatusSelected: (TaskStatus?) -> Unit,
+    selectedStatus: String?,
+    onStatusSelected: (String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val statuses = listOf(null, "PENDING", "EXECUTING", "COMPLETED", "FAILED", "PAUSED")
+
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
+        modifier = modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        FilterChip(
-            selected = selectedStatus == null,
-            onClick = { onStatusSelected(null) },
-            label = { Text("All") }
-        )
-        
-        TaskStatus.values().forEach { status ->
+        statuses.forEach { status ->
+            @OptIn(ExperimentalMaterial3Api::class)
             FilterChip(
                 selected = selectedStatus == status,
                 onClick = { onStatusSelected(status) },
-                label = { Text(status.name) }
+                label = { Text(status ?: "All") }
             )
         }
     }
