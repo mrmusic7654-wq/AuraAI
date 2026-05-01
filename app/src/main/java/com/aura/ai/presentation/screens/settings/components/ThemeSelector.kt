@@ -18,47 +18,24 @@ fun ThemeSelector(
     onThemeSelected: (ThemeMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Text(
-                text = "App Theme",
-                style = MaterialTheme.typography.titleMedium
-            )
-            
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = "App Theme", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
-            
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 ThemeMode.values().forEach { mode ->
-                    ThemeOption(
-                        mode = mode,
-                        isSelected = mode == selectedTheme,
+                    @OptIn(ExperimentalMaterial3Api::class)
+                    FilterChip(
+                        selected = mode == selectedTheme,
                         onClick = { onThemeSelected(mode) },
+                        label = { Text(mode.value) },
                         modifier = Modifier.weight(1f)
                     )
                 }
             }
         }
     }
-}
-
-@Composable
-private fun ThemeOption(
-    mode: ThemeMode,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    FilterChip(
-        selected = isSelected,
-        onClick = onClick,
-        label = { Text(mode.value) },
-        modifier = modifier.fillMaxWidth()
-    )
 }
