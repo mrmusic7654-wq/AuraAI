@@ -7,11 +7,11 @@ import androidx.compose.runtime.Composable
 @Composable
 fun AuraTopBar(
     title: String,
-    actions: @Composable (RowScope.() -> Unit) = {}
+    actions: @Composable (@Composable () -> Unit) -> Unit = {}
 ) {
     CenterAlignedTopAppBar(
         title = { Text(title) },
-        actions = actions,
+        actions = { actions {} },
         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
             containerColor = MaterialTheme.colorScheme.primary,
             titleContentColor = MaterialTheme.colorScheme.onPrimary,
