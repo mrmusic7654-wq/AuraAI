@@ -12,13 +12,5 @@ class SyncWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted params: WorkerParameters
 ) : CoroutineWorker(context, params) {
-    
-    override suspend fun doWork(): Result {
-        return try {
-            // Sync data with cloud/backend
-            Result.success()
-        } catch (e: Exception) {
-            Result.retry()
-        }
-    }
+    override suspend fun doWork(): Result = Result.success()
 }
