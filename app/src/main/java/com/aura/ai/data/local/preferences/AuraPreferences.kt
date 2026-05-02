@@ -1,6 +1,7 @@
 package com.aura.ai.data.local.preferences
 
 import android.content.Context
+import android.content.SharedPreferences
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -8,7 +9,7 @@ import javax.inject.Singleton
 class AuraPreferences @Inject constructor(
     private val context: Context
 ) {
-    private val prefs = context.getSharedPreferences("aura_prefs", Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences = context.getSharedPreferences("aura_prefs", Context.MODE_PRIVATE)
 
     fun getApiKey(): String? = prefs.getString("api_key", null)
     fun saveApiKey(apiKey: String) { prefs.edit().putString("api_key", apiKey).apply() }
