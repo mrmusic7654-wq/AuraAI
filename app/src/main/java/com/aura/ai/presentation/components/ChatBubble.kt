@@ -1,23 +1,23 @@
 package com.aura.ai.presentation.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import com.aura.ai.presentation.screens.agent.ChatMessage
+
+sealed class ChatMessage {
+    data class User(val content: String) : ChatMessage()
+    data class Agent(val content: String) : ChatMessage()
+    data class System(val content: String) : ChatMessage()
+}
 
 @Composable
-fun ChatBubble(
-    message: ChatMessage,
-    modifier: Modifier = Modifier
-) {
+fun ChatBubble(message: ChatMessage) {
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = when (message) {
             is ChatMessage.User -> Arrangement.End
             else -> Arrangement.Start
@@ -26,8 +26,7 @@ fun ChatBubble(
         Card(
             modifier = Modifier.widthIn(max = 280.dp),
             shape = RoundedCornerShape(
-                topStart = 16.dp,
-                topEnd = 16.dp,
+                topStart = 16.dp, topEnd = 16.dp,
                 bottomStart = if (message is ChatMessage.User) 16.dp else 4.dp,
                 bottomEnd = if (message is ChatMessage.User) 4.dp else 16.dp
             ),
