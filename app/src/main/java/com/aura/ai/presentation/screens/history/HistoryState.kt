@@ -1,10 +1,14 @@
 package com.aura.ai.presentation.screens.history
 
-import com.aura.ai.data.local.entities.TaskEntity
-
 data class HistoryState(
-    val tasks: List<TaskEntity> = emptyList(),
+    val tasks: List<TaskData> = emptyList(),
     val isLoading: Boolean = false,
-    val selectedTask: TaskEntity? = null,
-    val showDeleteConfirmation: Boolean = false
+    val selectedTask: TaskData? = null
+)
+
+data class TaskData(
+    val id: String = "",
+    val description: String = "",
+    val status: String = "PENDING",
+    val createdAt: String = "Just now"
 )
