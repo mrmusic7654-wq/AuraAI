@@ -6,12 +6,5 @@ import javax.inject.Inject
 class SaveApiKeyUseCase @Inject constructor(
     private val preferences: AuraPreferences
 ) {
-    
-    operator fun invoke(apiKey: String) {
-        preferences.saveApiKey(apiKey)
-    }
-    
-    suspend fun saveToDataStore(apiKey: String) {
-        preferences.saveApiKeyToDataStore(apiKey)
-    }
+    operator fun invoke(apiKey: String) { preferences.saveApiKey(apiKey) }
 }
