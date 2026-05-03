@@ -23,24 +23,25 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
+
     @Provides @Singleton
     fun providePreferences(@ApplicationContext c: Context) = AuraPreferences(c)
-    
+
     @Provides @Singleton
     fun provideDatabase(@ApplicationContext c: Context) = Room.databaseBuilder(c, AuraDatabase::class.java, "aura_database").fallbackToDestructiveMigration().build()
-    
+
     @Provides @Singleton
     fun provideGenerativeModel(p: AuraPreferences) = GenerativeModel("gemini-2.0-flash-exp", p.getApiKey() ?: "", generationConfig { temperature = 0.7f })
-    
+
     @Provides @Singleton
     fun provideScreenStateManager() = ScreenStateManager()
-    
+
     @Provides @Singleton
-    fun provideTaskRepository(db: AuraDatabase): TaskRepository = TaskRepositoryImpl(db.taskDao())
-    
+    fun provideTaskRepository(db: AuraDatabase, prefs: AuraPreferences): TaskRepository = TaskRepositoryImpl(db.taskDao(), prefs)
+
     @Provides @Singleton
     fun provideAgentRepository(gm: GenerativeModel, tr: TaskRepository, sm: ScreenStateManager, p: AuraPreferences): AgentRepository = AgentRepositoryImpl(gm, tr, sm, p)
-    
+
     @Provides @Singleton
     fun provideAutomationRepository(d: com.aura.ai.data.local.dao.AutomationRuleDao): AutomationRepository = AutomationRepositoryImpl(d)
 }
