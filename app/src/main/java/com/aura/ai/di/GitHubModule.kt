@@ -1,5 +1,6 @@
 package com.aura.ai.di
 
+import com.aura.ai.data.local.dao.GitHubRepoDao
 import com.aura.ai.data.local.preferences.AuraPreferences
 import com.aura.ai.data.remote.datasource.GitHubRemoteDataSource
 import com.aura.ai.data.repository.GitHubRepositoryImpl
@@ -18,6 +19,7 @@ object GitHubModule {
     @Singleton
     fun provideGitHubRepository(
         dataSource: GitHubRemoteDataSource,
+        repoDao: GitHubRepoDao,
         preferences: AuraPreferences
-    ): GitHubRepository = GitHubRepositoryImpl(dataSource, preferences)
+    ): GitHubRepository = GitHubRepositoryImpl(dataSource, repoDao, preferences)
 }
