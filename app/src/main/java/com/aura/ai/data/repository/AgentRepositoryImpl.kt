@@ -19,20 +19,19 @@ class AgentRepositoryImpl @Inject constructor(
     private val preferences: AuraPreferences
 ) : AgentRepository {
 
-    private var accessibilityService: AuraAccessibilityService? = null
-    private val _activeTask = MutableStateFlow<Task?>(null)
+    private var service: AuraAccessibilityService? = null
+    private val _task = MutableStateFlow<Task?>(null)
 
-    override fun setAccessibilityService(service: AuraAccessibilityService?) { this.accessibilityService = service }
-    override fun getActiveTask(): Flow<Task?> = _activeTask.asStateFlow()
+    override fun setAccessibilityService(s: AuraAccessibilityService?) { service = s }
+    override fun getActiveTask(): Flow<Task?> = _task.asStateFlow()
 
-    override suspend fun executeTask(taskDescription: String): Flow<TaskExecutionUpdate> = flow {
-        emit(TaskExecutionUpdate.Starting(taskDescription))
-        val task = Task(description = taskDescription, status = TaskStatus.EXECUTING)
-        _activeTask.value = task
-        emit(TaskExecutionUpdate.Completed(task))
+    override suspend fun executeTask(desc: String): Flow<TaskExecutionUpdate> = flow {
+        emit(TaskExecutionUpdate.Starting(desc))
+        val t = Task(description = desc)
+        _task.value = t
+        emit(TaskExecutionUpdate.Completed(t))
     }
-
-    override suspend fun planTask(taskDescription: String): List<AgentAction> = emptyList()
-    override suspend fun continueTask(taskId: String): Flow<TaskExecutionUpdate> = flow { emit(TaskExecutionUpdate.Error("Not implemented")) }
-    override suspend fun cancelTask(taskId: String) { _activeTask.value = null }
+    override suspend fun planTask(d: String) = emptyList<AgentAction>()
+    override suspend fun continueTask(id: String): Flow<TaskExecutionUpdate> = flow { emit(TaskExecutionUpdate.Error("N/I")) }
+    override suspend fun cancelTask(id: String) { _task.value = null }
 }
