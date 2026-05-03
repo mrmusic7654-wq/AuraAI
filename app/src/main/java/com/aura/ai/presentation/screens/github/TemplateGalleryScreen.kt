@@ -13,20 +13,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.aura.ai.presentation.components.AuraTopBar
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TemplateGalleryScreen(
     onBack: () -> Unit,
     onSelectTemplate: (String) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        AuraTopBar(
-            title = "Templates",
-            actions = {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                }
-            }
-        )
+        AuraTopBar(title = "Templates")
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -34,14 +28,8 @@ fun TemplateGalleryScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             items(listOf("Compose App", "MVI Template", "API App", "Room DB")) { template ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { onSelectTemplate(template) }
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
+                Card(modifier = Modifier.fillMaxWidth(), onClick = { onSelectTemplate(template) }) {
+                    Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(template, style = MaterialTheme.typography.titleMedium)
                     }
                 }
