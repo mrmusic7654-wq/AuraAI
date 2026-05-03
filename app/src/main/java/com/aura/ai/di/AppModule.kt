@@ -1,7 +1,6 @@
 package com.aura.ai.di
 
 import android.content.Context
-import androidx.room.Room
 import com.aura.ai.data.local.database.AuraDatabase
 import com.aura.ai.data.local.preferences.AuraPreferences
 import com.aura.ai.data.repository.AgentRepositoryImpl
@@ -26,9 +25,6 @@ object AppModule {
 
     @Provides @Singleton
     fun providePreferences(@ApplicationContext c: Context) = AuraPreferences(c)
-
-    @Provides @Singleton
-    fun provideDatabase(@ApplicationContext c: Context) = Room.databaseBuilder(c, AuraDatabase::class.java, "aura_database").fallbackToDestructiveMigration().build()
 
     @Provides @Singleton
     fun provideGenerativeModel(p: AuraPreferences) = GenerativeModel("gemini-2.0-flash-exp", p.getApiKey() ?: "", generationConfig { temperature = 0.7f })
