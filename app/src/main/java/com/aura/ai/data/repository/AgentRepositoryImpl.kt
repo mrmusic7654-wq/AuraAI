@@ -29,7 +29,6 @@ class AgentRepositoryImpl @Inject constructor(
         emit(TaskExecutionUpdate.Starting(taskDescription))
         val task = Task(description = taskDescription, status = TaskStatus.EXECUTING)
         _activeTask.value = task
-        emit(TaskExecutionUpdate.TaskCreated(task))
         emit(TaskExecutionUpdate.Completed(task))
     }
 
