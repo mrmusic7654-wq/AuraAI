@@ -8,7 +8,7 @@ import com.aura.ai.presentation.screens.home.HomeScreen
 
 @Composable
 fun AuraNavGraph(navController: NavHostController) {
-    NavHost(navController = navController, startDestination = Screen.Home.route) {
-        composable(Screen.Home.route) { HomeScreen(navController = navController) }
+    NavHost(navController = navController, startDestination = "home") {
+        composable("home") { HomeScreen() }
     }
 }
