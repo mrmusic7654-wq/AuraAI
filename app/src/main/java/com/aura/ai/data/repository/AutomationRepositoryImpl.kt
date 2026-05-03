@@ -23,11 +23,11 @@ class AutomationRepositoryImpl @Inject constructor(
     override fun getAllRules(): Flow<List<AutomationRuleData>> = ruleDao.getAllRules().map { list -> list.mapNotNull { it.toDomain() } }
     override fun getEnabledRules(): Flow<List<AutomationRuleData>> = ruleDao.getEnabledRules().map { list -> list.mapNotNull { it.toDomain() } }
     override suspend fun getRuleById(ruleId: String): AutomationRuleData? = ruleDao.getRuleById(ruleId)?.toDomain()
+
     override suspend fun createRule(name: String, description: String?, triggerApp: String?, triggerText: String?, triggerTime: String?, actions: List<AgentAction>): Result<String> {
         return try {
             val entity = AutomationRuleEntity(
-                id = UUID.randomUUID().toString(),
-                name = name, description = description,
+                id = UUID.randomUUID().toString(), name = name, description = description,
                 triggerApp = triggerApp, triggerText = triggerText, triggerTime = triggerTime,
                 actions = json.encodeToString(actions)
             )
@@ -35,10 +35,12 @@ class AutomationRepositoryImpl @Inject constructor(
             Result.success(entity.id)
         } catch (e: Exception) { Result.failure(e) }
     }
+
     override suspend fun updateRule(rule: AutomationRuleData): Result<Unit> = try {
         ruleDao.updateRule(AutomationRuleEntity(rule.id, rule.name, rule.description, rule.triggerApp, rule.triggerText, rule.triggerTime, json.encodeToString(rule.actions), rule.isEnabled, rule.createdAt, rule.lastTriggered))
         Result.success(Unit)
     } catch (e: Exception) { Result.failure(e) }
+
     override suspend fun deleteRule(ruleId: String) { ruleDao.deleteRule(ruleId) }
     override suspend fun setRuleEnabled(ruleId: String, enabled: Boolean) { ruleDao.setRuleEnabled(ruleId, enabled) }
     override suspend fun updateLastTriggered(ruleId: String) {}
