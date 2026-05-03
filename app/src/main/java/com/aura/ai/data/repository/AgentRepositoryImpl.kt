@@ -3,6 +3,7 @@ package com.aura.ai.data.repository
 import com.aura.ai.data.local.preferences.AuraPreferences
 import com.aura.ai.data.models.*
 import com.aura.ai.domain.repository.AgentRepository
+import com.aura.ai.domain.repository.TaskExecutionUpdate
 import com.aura.ai.domain.repository.TaskRepository
 import com.aura.ai.services.AuraAccessibilityService
 import com.aura.ai.services.ScreenStateManager
