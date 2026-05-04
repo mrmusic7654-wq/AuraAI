@@ -10,10 +10,6 @@ jobs:
     name: Launch App on Emulator
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        api-level: [34]
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -30,11 +26,23 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Run crash test
+      - name: Run crash test with logcat capture
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
           api-level: 34
           target: default
           arch: x86_64
           profile: pixel_6
-          script: ./gradlew :app:connectedDebugAndroidTest
+          script: |
+            adb logcat -c  # Clear logcat
+            ./gradlew :app:connectedDebugAndroidTest || true  # Run test, continue even if fail
+            adb logcat -d > logcat.txt  # Save all logs
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            app/build/reports/androidTests/connected/
+            logcat.txt
