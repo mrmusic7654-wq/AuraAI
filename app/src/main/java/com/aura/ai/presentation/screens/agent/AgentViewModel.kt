@@ -1,30 +1,64 @@
 package com.aura.ai.presentation.screens.agent
 
 import androidx.lifecycle.ViewModel
-import com.aura.ai.presentation.components.ChatMessage
+import androidx.lifecycle.viewModelScope
+import com.google.ai.client.generativeai.GenerativeModel
+import com.google.ai.client.generativeai.type.content
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+data class ChatMessage(val text: String, val isUser: Boolean)
+
+data class AgentUiState(
+    val messages: List<ChatMessage> = listOf(
+        ChatMessage("Hello! I'm Aura AI. How can I help you today?", false)
+    ),
+    val input: String = "",
+    val loading: Boolean = false
+)
+
 @HiltViewModel
-class AgentViewModel @Inject constructor() : ViewModel() {
+class AgentViewModel @Inject constructor(
+    private val generativeModel: GenerativeModel
+) : ViewModel() {
 
-    private val _state = MutableStateFlow(AgentState())
-    val state: StateFlow<AgentState> = _state.asStateFlow()
+    private val _state = MutableStateFlow(AgentUiState())
+    val state: StateFlow<AgentUiState> = _state.asStateFlow()
 
-    fun updateInput(input: String) { _state.value = _state.value.copy(currentInput = input) }
-    fun sendMessage() {
-        val input = _state.value.currentInput
-        if (input.isNotBlank()) {
-            _state.value = _state.value.copy(
-                messages = _state.value.messages + listOf(ChatMessage.User(input), ChatMessage.Agent("Received: $input")),
-                currentInput = ""
-            )
+    fun updateInput(text: String) {
+        _state.value = _state.value.copy(input = text)
+    }
+
+    fun send() {
+        val userMessage = _state.value.input.trim()
+        if (userMessage.isBlank()) return
+
+        _state.value = _state.value.copy(
+            messages = _state.value.messages + ChatMessage(userMessage, true),
+            input = "",
+            loading = true
+        )
+
+        viewModelScope.launch {
+            try {
+                val response = generativeModel.generateContent(
+                    content { text("You are Aura AI, a helpful phone assistant. User: $userMessage") }
+                )
+                val reply = response.text ?: "I couldn't process that."
+                _state.value = _state.value.copy(
+                    messages = _state.value.messages + ChatMessage(reply, false),
+                    loading = false
+                )
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    messages = _state.value.messages + ChatMessage("Error: ${e.message}", false),
+                    loading = false
+                )
+            }
         }
     }
-    fun stopExecution() {}
-    fun clearConversation() { _state.value = AgentState() }
-    fun checkAccessibilityStatus() {}
 }
