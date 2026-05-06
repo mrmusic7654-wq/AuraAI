@@ -15,8 +15,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object GitHubModule {
 
-    @Provides
-    @Singleton
+    @Provides @Singleton
     fun provideGitHubRepository(
         dataSource: GitHubRemoteDataSource,
         repoDao: GitHubRepoDao,
