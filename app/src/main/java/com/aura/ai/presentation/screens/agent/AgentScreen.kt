@@ -1,6 +1,5 @@
 package com.aura.ai.presentation.screens.agent
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,11 +21,8 @@ fun AgentScreen(viewModel: AgentViewModel = hiltViewModel()) {
     val listState = rememberLazyListState()
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Chat messages
         LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
+            modifier = Modifier.weight(1f).fillMaxWidth(),
             state = listState,
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -38,34 +34,38 @@ fun AgentScreen(viewModel: AgentViewModel = hiltViewModel()) {
                 ) {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = if (msg.isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                        color = if (msg.isUser) Color(0xFF6750A4) else Color(0xFF2D2D2D),
                         modifier = Modifier.widthIn(max = 300.dp)
                     ) {
                         Text(
                             text = msg.text,
                             modifier = Modifier.padding(12.dp),
-                            color = if (msg.isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = Color.White
                         )
                     }
                 }
             }
         }
 
-        // Input bar
-        Surface(modifier = Modifier.fillMaxWidth(), shadowElevation = 4.dp) {
+        Surface(modifier = Modifier.fillMaxWidth(), color = Color(0xFF1E1E1E), shadowElevation = 4.dp) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OutlinedTextField(
                     value = state.input,
                     onValueChange = { viewModel.updateInput(it) },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Tell Aura what to do...") },
+                    placeholder = { Text("Tell Aura what to do...", color = Color.Gray) },
                     shape = RoundedCornerShape(24.dp),
-                    singleLine = true
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        cursorColor = Color.White,
+                        focusedBorderColor = Color(0xFF6750A4),
+                        unfocusedBorderColor = Color.Gray,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 IconButton(
@@ -73,9 +73,9 @@ fun AgentScreen(viewModel: AgentViewModel = hiltViewModel()) {
                     enabled = state.input.isNotBlank() && !state.loading
                 ) {
                     if (state.loading) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color(0xFF6750A4))
                     } else {
-                        Icon(Icons.Default.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.Send, contentDescription = "Send", tint = Color(0xFF6750A4))
                     }
                 }
             }
