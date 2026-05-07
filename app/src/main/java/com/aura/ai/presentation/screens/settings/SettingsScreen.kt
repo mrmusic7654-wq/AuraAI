@@ -63,7 +63,18 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             modifier = Modifier.fillMaxWidth(),
             enabled = state.apiKey.isNotBlank()
         ) {
-            Text(if (state.saved) "✅ Saved! Restart the app to apply." else "Save API Key")
+            Text(if (state.saved) "✅ Saved! Restart to apply." else "Save API Key")
+        }
+
+        if (state.saved) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = { viewModel.restartApp() },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00BFA5))
+            ) {
+                Text("Restart App Now")
+            }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
