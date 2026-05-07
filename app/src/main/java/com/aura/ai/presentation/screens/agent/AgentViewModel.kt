@@ -30,7 +30,7 @@ class AgentViewModel @Inject constructor() : ViewModel() {
 
     private val model = GenerativeModel(
         modelName = "gemini-2.0-flash",
-        apiKey = "AIzaSyBdYMFp6n-VdPNXco9VtZRhlwrngd1Rwvo",
+        apiKey = "AIzaSyBlPn0u-3TDY8h9FVjEv4aIu4Bxr_uHiTk",
         generationConfig = generationConfig {
             temperature = 0.7f
             topK = 40
