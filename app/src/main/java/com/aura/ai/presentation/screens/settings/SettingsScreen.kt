@@ -45,6 +45,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                     Icon(if (visible) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = "Toggle", tint = Color.White)
                 }
             },
+            textStyle = LocalTextStyle.current.copy(color = Color.White),
             colors = OutlinedTextFieldDefaults.colors(
                 cursorColor = Color.White,
                 focusedBorderColor = Color(0xFF6750A4),
