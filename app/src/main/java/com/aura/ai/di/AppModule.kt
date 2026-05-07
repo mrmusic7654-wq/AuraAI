@@ -29,7 +29,7 @@ object AppModule {
     @Provides @Singleton
     fun provideGenerativeModel() = GenerativeModel(
         modelName = "gemini-2.0-flash",
-        apiKey = "YOUR_GEMINI_API_KEY_HERE",
+        apiKey = "AIzaSyARsPBIiK3P7XQzEDy80R4XmUDCCX3djhc",
         generationConfig = generationConfig {
             temperature = 0.7f
             topK = 40
