@@ -2,7 +2,6 @@ package com.aura.ai.presentation.screens.agent
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.aura.ai.data.local.preferences.AuraPreferences
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.google.ai.client.generativeai.type.generationConfig
@@ -24,27 +23,21 @@ data class AgentUiState(
 )
 
 @HiltViewModel
-class AgentViewModel @Inject constructor(
-    private val preferences: AuraPreferences
-) : ViewModel() {
+class AgentViewModel @Inject constructor() : ViewModel() {
 
     private val _state = MutableStateFlow(AgentUiState())
     val state: StateFlow<AgentUiState> = _state.asStateFlow()
 
-    private fun getModel(): GenerativeModel? {
-        val key = preferences.getApiKey()
-        if (key.isNullOrBlank()) return null
-        return GenerativeModel(
-            modelName = "gemini-2.0-flash",
-            apiKey = key,
-            generationConfig = generationConfig {
-                temperature = 0.7f
-                topK = 40
-                topP = 0.95f
-                maxOutputTokens = 2048
-            }
-        )
-    }
+    private val model = GenerativeModel(
+        modelName = "gemini-2.0-flash",
+        apiKey = "YOUR_GEMINI_API_KEY_HERE",
+        generationConfig = generationConfig {
+            temperature = 0.7f
+            topK = 40
+            topP = 0.95f
+            maxOutputTokens = 2048
+        }
+    )
 
     fun updateInput(text: String) {
         _state.value = _state.value.copy(input = text)
@@ -62,18 +55,6 @@ class AgentViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val model = getModel()
-                if (model == null) {
-                    _state.value = _state.value.copy(
-                        messages = _state.value.messages + ChatMessage(
-                            "No API key found. Add your Gemini API key in Settings.",
-                            false
-                        ),
-                        loading = false
-                    )
-                    return@launch
-                }
-
                 val response = model.generateContent(
                     content { text(userMessage) }
                 )
