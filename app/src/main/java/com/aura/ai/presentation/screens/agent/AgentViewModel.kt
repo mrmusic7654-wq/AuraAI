@@ -35,7 +35,7 @@ class AgentViewModel @Inject constructor(
         val key = preferences.getApiKey()
         if (key.isNullOrBlank()) return null
         return GenerativeModel(
-            modelName = "gemini-2.0-flash-exp",
+            modelName = "gemini-2.0-flash",
             apiKey = key,
             generationConfig = generationConfig {
                 temperature = 0.7f
@@ -66,7 +66,7 @@ class AgentViewModel @Inject constructor(
                 if (model == null) {
                     _state.value = _state.value.copy(
                         messages = _state.value.messages + ChatMessage(
-                            "No API key found. Please add your Gemini API key in Settings.",
+                            "No API key found. Add your Gemini API key in Settings.",
                             false
                         ),
                         loading = false
@@ -75,7 +75,7 @@ class AgentViewModel @Inject constructor(
                 }
 
                 val response = model.generateContent(
-                    content { text("You are Aura AI, a helpful phone assistant. User: $userMessage") }
+                    content { text(userMessage) }
                 )
                 val reply = response.text ?: "I couldn't process that."
 
