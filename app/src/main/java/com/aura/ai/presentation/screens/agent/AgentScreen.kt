@@ -59,6 +59,7 @@ fun AgentScreen(viewModel: AgentViewModel = hiltViewModel()) {
                     placeholder = { Text("Tell Aura what to do...", color = Color.Gray) },
                     shape = RoundedCornerShape(24.dp),
                     singleLine = true,
+                    textStyle = LocalTextStyle.current.copy(color = Color.White),
                     colors = OutlinedTextFieldDefaults.colors(
                         cursorColor = Color.White,
                         focusedBorderColor = Color(0xFF6750A4),
