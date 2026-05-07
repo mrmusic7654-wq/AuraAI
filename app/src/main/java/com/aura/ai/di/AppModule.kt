@@ -27,19 +27,16 @@ object AppModule {
     fun providePreferences(@ApplicationContext c: Context) = AuraPreferences(c)
 
     @Provides @Singleton
-    fun provideGenerativeModel(p: AuraPreferences): GenerativeModel {
-        val apiKey = p.getApiKey() ?: ""
-        return GenerativeModel(
-            modelName = "gemini-2.0-flash-exp",
-            apiKey = apiKey,
-            generationConfig = generationConfig {
-                temperature = 0.7f
-                topK = 40
-                topP = 0.95f
-                maxOutputTokens = 2048
-            }
-        )
-    }
+    fun provideGenerativeModel() = GenerativeModel(
+        modelName = "gemini-2.0-flash",
+        apiKey = "YOUR_GEMINI_API_KEY_HERE",
+        generationConfig = generationConfig {
+            temperature = 0.7f
+            topK = 40
+            topP = 0.95f
+            maxOutputTokens = 2048
+        }
+    )
 
     @Provides @Singleton
     fun provideScreenStateManager() = ScreenStateManager()
@@ -50,10 +47,7 @@ object AppModule {
 
     @Provides @Singleton
     fun provideAgentRepository(
-        gm: GenerativeModel,
-        tr: TaskRepository,
-        sm: ScreenStateManager,
-        p: AuraPreferences
+        gm: GenerativeModel, tr: TaskRepository, sm: ScreenStateManager, p: AuraPreferences
     ): AgentRepository = AgentRepositoryImpl(gm, tr, sm, p)
 
     @Provides @Singleton
