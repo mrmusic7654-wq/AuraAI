@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -23,6 +24,8 @@ import androidx.navigation.compose.rememberNavController
 import com.aura.ai.presentation.screens.agent.AgentScreen
 import com.aura.ai.presentation.screens.home.HomeScreen
 import com.aura.ai.presentation.screens.settings.SettingsScreen
+import com.aura.ai.presentation.screens.tasks.TasksScreen
+import com.aura.ai.presentation.screens.scheduler.SchedulerScreen
 import com.aura.ai.presentation.theme.*
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -87,8 +90,8 @@ fun AuraMainScreen() {
             NavHost(navController, startDestination = "nexus", Modifier.padding(padding)) {
                 composable("nexus") { HomeScreen() }
                 composable("neural") { AgentScreen() }
-                composable("tasks") { PlaceholderScreen("Tasks", "Active & pending tasks", Amber400) }
-                composable("scheduler") { PlaceholderScreen("Scheduler", "Timed & conditional triggers", Violet400) }
+                composable("tasks") { TasksScreen() }
+                composable("scheduler") { SchedulerScreen() }
                 composable("swarm") { PlaceholderScreen("Swarm", "Connected AI agents", Emerald400) }
                 composable("protocol") { SettingsScreen() }
                 composable("vault") { PlaceholderScreen("Vault", "File explorer", Indigo400) }
@@ -118,5 +121,4 @@ fun PlaceholderScreen(title: String, subtitle: String, accent: Color) {
     }
 }
 
-// Add Indigo color
 val Indigo400 = Color(0xFF818CF8)
