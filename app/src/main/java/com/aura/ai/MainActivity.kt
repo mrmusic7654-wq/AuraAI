@@ -23,9 +23,12 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.aura.ai.presentation.screens.agent.AgentScreen
 import com.aura.ai.presentation.screens.home.HomeScreen
-import com.aura.ai.presentation.screens.settings.SettingsScreen
-import com.aura.ai.presentation.screens.tasks.TasksScreen
+import com.aura.ai.presentation.screens.netsurfer.NetSurferScreen
 import com.aura.ai.presentation.screens.scheduler.SchedulerScreen
+import com.aura.ai.presentation.screens.settings.SettingsScreen
+import com.aura.ai.presentation.screens.swarm.SwarmScreen
+import com.aura.ai.presentation.screens.tasks.TasksScreen
+import com.aura.ai.presentation.screens.vault.VaultScreen
 import com.aura.ai.presentation.theme.*
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -33,11 +36,7 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            AuraCyberpunkTheme {
-                AuraMainScreen()
-            }
-        }
+        setContent { AuraCyberpunkTheme { AuraMainScreen() } }
     }
 }
 
@@ -65,10 +64,7 @@ fun AuraMainScreen() {
         Scaffold(
             containerColor = Color.Transparent,
             bottomBar = {
-                NavigationBar(
-                    containerColor = Color(0xFF020617).copy(alpha = 0.95f),
-                    tonalElevation = 0.dp
-                ) {
+                NavigationBar(containerColor = Color(0xFF020617).copy(alpha = 0.95f), tonalElevation = 0.dp) {
                     items.forEach { item ->
                         val selected = current == item.route
                         NavigationBarItem(
@@ -76,10 +72,7 @@ fun AuraMainScreen() {
                             label = { Text(item.title, style = MaterialTheme.typography.labelMedium.copy(fontSize = androidx.compose.ui.unit.TextUnit(8f, androidx.compose.ui.unit.TextUnitType.Sp)), color = if (selected) Color.White else Color(0xFF64748B)) },
                             selected = selected,
                             onClick = {
-                                if (current != item.route) navController.navigate(item.route) {
-                                    popUpTo("nexus") { saveState = true }
-                                    launchSingleTop = true; restoreState = true
-                                }
+                                if (current != item.route) navController.navigate(item.route) { popUpTo("nexus") { saveState = true }; launchSingleTop = true; restoreState = true }
                             },
                             colors = NavigationBarItemDefaults.colors(indicatorColor = Cyan500.copy(alpha = 0.15f))
                         )
@@ -92,10 +85,10 @@ fun AuraMainScreen() {
                 composable("neural") { AgentScreen() }
                 composable("tasks") { TasksScreen() }
                 composable("scheduler") { SchedulerScreen() }
-                composable("swarm") { PlaceholderScreen("Swarm", "Connected AI agents", Emerald400) }
+                composable("swarm") { SwarmScreen() }
                 composable("protocol") { SettingsScreen() }
-                composable("vault") { PlaceholderScreen("Vault", "File explorer", Indigo400) }
-                composable("netsurfer") { PlaceholderScreen("NetSurfer", "Built-in browser", Blue400) }
+                composable("vault") { VaultScreen() }
+                composable("netsurfer") { NetSurferScreen() }
                 composable("market") { PlaceholderScreen("Market", "AI service marketplace", Amber400) }
                 composable("matrix") { PlaceholderScreen("Matrix", "System logs & terminal", Rose400) }
             }
@@ -105,11 +98,7 @@ fun AuraMainScreen() {
 
 @Composable
 fun PlaceholderScreen(title: String, subtitle: String, accent: Color) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Box(modifier = Modifier.size(80.dp).background(accent.copy(alpha = 0.1f), RoundedCornerShape(20.dp)), contentAlignment = Alignment.Center) {
             Text(title.take(1), style = MaterialTheme.typography.headlineLarge, color = accent, fontWeight = FontWeight.Black)
         }
