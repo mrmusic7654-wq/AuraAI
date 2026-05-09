@@ -28,29 +28,20 @@ object AppModule {
 
     @Provides @Singleton
     fun provideGenerativeModel() = GenerativeModel(
-        modelName = "gemini-2.0-flash",
-        apiKey = "AIzaSyBlPn0u-3TDY8h9FVjEv4aIu4Bxr_uHiTk",
-        generationConfig = generationConfig {
-            temperature = 0.7f
-            topK = 40
-            topP = 0.95f
-            maxOutputTokens = 2048
-        }
+        modelName = "gemini-2.5-flash",
+        apiKey = "",
+        generationConfig = generationConfig { temperature = 0.7f; topK = 40; topP = 0.95f; maxOutputTokens = 2048 }
     )
 
     @Provides @Singleton
     fun provideScreenStateManager() = ScreenStateManager()
 
     @Provides @Singleton
-    fun provideTaskRepository(db: AuraDatabase, prefs: AuraPreferences): TaskRepository =
-        TaskRepositoryImpl(db.taskDao(), prefs)
+    fun provideTaskRepository(db: AuraDatabase, prefs: AuraPreferences): TaskRepository = TaskRepositoryImpl(db.taskDao(), prefs)
 
     @Provides @Singleton
-    fun provideAgentRepository(
-        gm: GenerativeModel, tr: TaskRepository, sm: ScreenStateManager, p: AuraPreferences
-    ): AgentRepository = AgentRepositoryImpl(gm, tr, sm, p)
+    fun provideAgentRepository(gm: GenerativeModel, tr: TaskRepository, sm: ScreenStateManager, p: AuraPreferences): AgentRepository = AgentRepositoryImpl(gm, tr, sm, p)
 
     @Provides @Singleton
-    fun provideAutomationRepository(d: com.aura.ai.data.local.dao.AutomationRuleDao): AutomationRepository =
-        AutomationRepositoryImpl(d)
+    fun provideAutomationRepository(d: com.aura.ai.data.local.dao.AutomationRuleDao): AutomationRepository = AutomationRepositoryImpl(d)
 }
