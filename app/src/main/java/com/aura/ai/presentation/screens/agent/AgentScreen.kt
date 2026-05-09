@@ -21,7 +21,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.aura.ai.presentation.theme.*
-import com.jeziellago.compose.markdown.Markdown
 
 @Composable
 fun AgentScreen(viewModel: AgentViewModel = hiltViewModel()) {
@@ -35,7 +34,12 @@ fun AgentScreen(viewModel: AgentViewModel = hiltViewModel()) {
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).border(2.dp, Fuchsia500.copy(alpha = 0.5f), RoundedCornerShape(12.dp)).background(Fuchsia500.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp))
+                    .border(2.dp, Fuchsia500.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                    .background(Fuchsia500.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
                 Icon(Icons.Default.Psychology, null, tint = Fuchsia400, modifier = Modifier.size(24.dp))
             }
             Spacer(modifier = Modifier.width(12.dp))
@@ -59,25 +63,35 @@ fun AgentScreen(viewModel: AgentViewModel = hiltViewModel()) {
                     horizontalArrangement = if (msg.isUser) Arrangement.End else Arrangement.Start
                 ) {
                     if (!msg.isUser) {
-                        Box(modifier = Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(Fuchsia500.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
+                        Box(
+                            modifier = Modifier.size(32.dp).clip(RoundedCornerShape(8.dp))
+                                .background(Fuchsia500.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Icon(Icons.Default.Psychology, null, tint = Fuchsia400, modifier = Modifier.size(16.dp))
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                     }
                     Surface(
-                        shape = RoundedCornerShape(if (msg.isUser) 16.dp else 16.dp).let { if (msg.isUser) it.copy(topEnd = RoundedCornerShape(4.dp)) else it.copy(topStart = RoundedCornerShape(4.dp)) },
+                        shape = if (msg.isUser) RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp)
+                                else RoundedCornerShape(4.dp, 16.dp, 16.dp, 16.dp),
                         color = if (msg.isUser) Cyan500.copy(alpha = 0.15f) else Color(0xFF1E293B),
                         modifier = Modifier.widthIn(max = 300.dp)
                     ) {
-                        if (msg.isUser) {
-                            Text(msg.text, modifier = Modifier.padding(12.dp), color = Color.White, style = MaterialTheme.typography.bodyMedium)
-                        } else {
-                            Markdown(content = msg.text, Modifier.padding(12.dp), color = Color.White)
-                        }
+                        Text(
+                            msg.text,
+                            modifier = Modifier.padding(12.dp),
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     }
                     if (msg.isUser) {
                         Spacer(modifier = Modifier.width(8.dp))
-                        Box(modifier = Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(Cyan500.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
+                        Box(
+                            modifier = Modifier.size(32.dp).clip(RoundedCornerShape(8.dp))
+                                .background(Cyan500.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Icon(Icons.Default.Person, null, tint = Cyan400, modifier = Modifier.size(16.dp))
                         }
                     }
@@ -86,7 +100,10 @@ fun AgentScreen(viewModel: AgentViewModel = hiltViewModel()) {
             if (state.loading) {
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        repeat(3) { i -> Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Fuchsia500.copy(alpha = 0.5f))); Spacer(modifier = Modifier.width(4.dp)) }
+                        repeat(3) { i ->
+                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Fuchsia500.copy(alpha = 0.5f)))
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Synthesizing...", style = MaterialTheme.typography.labelMedium, color = TextMuted)
                     }
@@ -94,18 +111,37 @@ fun AgentScreen(viewModel: AgentViewModel = hiltViewModel()) {
             }
         }
 
-        Surface(modifier = Modifier.fillMaxWidth(), color = Color(0xFF020617).copy(alpha = 0.95f), shadowElevation = 8.dp) {
-            Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color(0xFF020617).copy(alpha = 0.95f),
+            shadowElevation = 8.dp
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 OutlinedTextField(
                     value = state.input, onValueChange = { viewModel.updateInput(it) },
-                    modifier = Modifier.weight(1f), placeholder = { Text("Interlink directive...", color = TextMuted) },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Interlink directive...", color = TextMuted) },
                     shape = RoundedCornerShape(24.dp), singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(cursorColor = Cyan500, focusedBorderColor = Cyan500, unfocusedBorderColor = CyberBorder, focusedTextColor = Color.White, unfocusedTextColor = Color.White),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        cursorColor = Cyan500, focusedBorderColor = Cyan500,
+                        unfocusedBorderColor = CyberBorder,
+                        focusedTextColor = Color.White, unfocusedTextColor = Color.White
+                    ),
                     textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.White)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                IconButton(onClick = { viewModel.send() }, enabled = state.input.isNotBlank() && !state.loading, modifier = Modifier.size(48.dp).clip(CircleShape).background(if (state.input.isNotBlank()) Cyan500 else Color(0xFF334155))) {
-                    if (state.loading) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                IconButton(
+                    onClick = { viewModel.send() },
+                    enabled = state.input.isNotBlank() && !state.loading,
+                    modifier = Modifier.size(48.dp).clip(CircleShape)
+                        .background(if (state.input.isNotBlank()) Cyan500 else Color(0xFF334155))
+                ) {
+                    if (state.loading) CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp
+                    )
                     else Icon(Icons.Default.Send, null, tint = Color.White, modifier = Modifier.size(20.dp))
                 }
             }
