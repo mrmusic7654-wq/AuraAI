@@ -23,6 +23,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.aura.ai.presentation.screens.agent.AgentScreen
 import com.aura.ai.presentation.screens.home.HomeScreen
+import com.aura.ai.presentation.screens.market.MarketScreen
+import com.aura.ai.presentation.screens.matrix.MatrixScreen
 import com.aura.ai.presentation.screens.netsurfer.NetSurferScreen
 import com.aura.ai.presentation.screens.scheduler.SchedulerScreen
 import com.aura.ai.presentation.screens.settings.SettingsScreen
@@ -61,25 +63,22 @@ fun AuraMainScreen() {
     val current = backStack?.destination?.route
 
     Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF020617), Color(0xFF0F172A))))) {
-        Scaffold(
-            containerColor = Color.Transparent,
-            bottomBar = {
-                NavigationBar(containerColor = Color(0xFF020617).copy(alpha = 0.95f), tonalElevation = 0.dp) {
-                    items.forEach { item ->
-                        val selected = current == item.route
-                        NavigationBarItem(
-                            icon = { Icon(item.icon, item.title, tint = if (selected) Cyan500 else Color(0xFF64748B), modifier = Modifier.size(22.dp)) },
-                            label = { Text(item.title, style = MaterialTheme.typography.labelMedium.copy(fontSize = androidx.compose.ui.unit.TextUnit(8f, androidx.compose.ui.unit.TextUnitType.Sp)), color = if (selected) Color.White else Color(0xFF64748B)) },
-                            selected = selected,
-                            onClick = {
-                                if (current != item.route) navController.navigate(item.route) { popUpTo("nexus") { saveState = true }; launchSingleTop = true; restoreState = true }
-                            },
-                            colors = NavigationBarItemDefaults.colors(indicatorColor = Cyan500.copy(alpha = 0.15f))
-                        )
-                    }
+        Scaffold(containerColor = Color.Transparent, bottomBar = {
+            NavigationBar(containerColor = Color(0xFF020617).copy(alpha = 0.95f), tonalElevation = 0.dp) {
+                items.forEach { item ->
+                    val selected = current == item.route
+                    NavigationBarItem(
+                        icon = { Icon(item.icon, item.title, tint = if (selected) Cyan500 else Color(0xFF64748B), modifier = Modifier.size(22.dp)) },
+                        label = { Text(item.title, style = MaterialTheme.typography.labelMedium.copy(fontSize = androidx.compose.ui.unit.TextUnit(8f, androidx.compose.ui.unit.TextUnitType.Sp)), color = if (selected) Color.White else Color(0xFF64748B)) },
+                        selected = selected,
+                        onClick = {
+                            if (current != item.route) navController.navigate(item.route) { popUpTo("nexus") { saveState = true }; launchSingleTop = true; restoreState = true }
+                        },
+                        colors = NavigationBarItemDefaults.colors(indicatorColor = Cyan500.copy(alpha = 0.15f))
+                    )
                 }
             }
-        ) { padding ->
+        }) { padding ->
             NavHost(navController, startDestination = "nexus", Modifier.padding(padding)) {
                 composable("nexus") { HomeScreen() }
                 composable("neural") { AgentScreen() }
@@ -89,25 +88,9 @@ fun AuraMainScreen() {
                 composable("protocol") { SettingsScreen() }
                 composable("vault") { VaultScreen() }
                 composable("netsurfer") { NetSurferScreen() }
-                composable("market") { PlaceholderScreen("Market", "AI service marketplace", Amber400) }
-                composable("matrix") { PlaceholderScreen("Matrix", "System logs & terminal", Rose400) }
+                composable("market") { MarketScreen() }
+                composable("matrix") { MatrixScreen() }
             }
         }
     }
 }
-
-@Composable
-fun PlaceholderScreen(title: String, subtitle: String, accent: Color) {
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Box(modifier = Modifier.size(80.dp).background(accent.copy(alpha = 0.1f), RoundedCornerShape(20.dp)), contentAlignment = Alignment.Center) {
-            Text(title.take(1), style = MaterialTheme.typography.headlineLarge, color = accent, fontWeight = FontWeight.Black)
-        }
-        Spacer(modifier = Modifier.height(20.dp))
-        Text(title, style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.Bold)
-        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = TextMuted)
-        Spacer(modifier = Modifier.height(24.dp))
-        Text("Coming in next update...", style = MaterialTheme.typography.labelMedium, color = TextMuted)
-    }
-}
-
-val Indigo400 = Color(0xFF818CF8)
