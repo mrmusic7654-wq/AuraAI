@@ -2,6 +2,7 @@ package com.aura.ai.presentation.screens.agent
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.aura.ai.data.local.preferences.AuraPreferences
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.google.ai.client.generativeai.type.generationConfig
@@ -16,58 +17,61 @@ data class ChatMessage(val text: String, val isUser: Boolean)
 
 data class AgentUiState(
     val messages: List<ChatMessage> = listOf(
-        ChatMessage("Hello! I'm Aura AI. How can I help you?", false)
+        ChatMessage("Neural link established. I am Aura, your interface into the global matrix. How can I assist with your current directives?", false)
     ),
     val input: String = "",
     val loading: Boolean = false
 )
 
 @HiltViewModel
-class AgentViewModel @Inject constructor() : ViewModel() {
+class AgentViewModel @Inject constructor(
+    private val preferences: AuraPreferences
+) : ViewModel() {
 
     private val _state = MutableStateFlow(AgentUiState())
     val state: StateFlow<AgentUiState> = _state.asStateFlow()
 
-    private val model = GenerativeModel(
-        modelName = "gemini-2.5-flash",
-        apiKey = "AIzaSyBlPn0u-3TDY8h9FVjEv4aIu4Bxr_uHiTk",
-        generationConfig = generationConfig {
-            temperature = 0.7f
-            topK = 40
-            topP = 0.95f
-            maxOutputTokens = 2048
-        }
-    )
-
-    fun updateInput(text: String) {
-        _state.value = _state.value.copy(input = text)
+    private fun getModel(): GenerativeModel? {
+        val key = preferences.getApiKey()
+        if (key.isNullOrBlank()) return null
+        return GenerativeModel(
+            modelName = "gemini-2.5-flash",
+            apiKey = key,
+            generationConfig = generationConfig {
+                temperature = 0.7f; topK = 40; topP = 0.95f; maxOutputTokens = 2048
+            }
+        )
     }
+
+    fun updateInput(text: String) { _state.value = _state.value.copy(input = text) }
 
     fun send() {
         val userMessage = _state.value.input.trim()
         if (userMessage.isBlank()) return
-
         _state.value = _state.value.copy(
             messages = _state.value.messages + ChatMessage(userMessage, true),
-            input = "",
-            loading = true
+            input = "", loading = true
         )
-
         viewModelScope.launch {
             try {
-                val response = model.generateContent(
-                    content { text(userMessage) }
-                )
-                val reply = response.text ?: "I couldn't process that."
-
+                val model = getModel()
+                if (model == null) {
+                    _state.value = _state.value.copy(
+                        messages = _state.value.messages + ChatMessage("No API key found. Add your Gemini API key in Settings.", false),
+                        loading = false
+                    )
+                    return@launch
+                }
+                val response = model.generateContent(content { text(userMessage) })
                 _state.value = _state.value.copy(
-                    messages = _state.value.messages + ChatMessage(reply, false),
+                    messages = _state.value.messages + ChatMessage(response.text ?: "No response.", false),
                     loading = false
                 )
-
             } catch (e: Exception) {
+                val msg = if (e.message?.contains("503") == true) "Gemini is busy. Try again."
+                else "Error: ${e.message}"
                 _state.value = _state.value.copy(
-                    messages = _state.value.messages + ChatMessage("Error: ${e.message}", false),
+                    messages = _state.value.messages + ChatMessage(msg, false),
                     loading = false
                 )
             }
