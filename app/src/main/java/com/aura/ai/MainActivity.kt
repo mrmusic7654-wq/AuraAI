@@ -84,36 +84,26 @@ fun AuraMainScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // Logo
             Box(
-                modifier = Modifier.size(36.dp).clip(CircleShape)
-                    .background(Cyan500.copy(alpha = 0.2f)),
+                modifier = Modifier.size(36.dp).clip(CircleShape).background(Cyan500.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
             ) { Icon(Icons.Default.Memory, null, tint = Cyan400, modifier = Modifier.size(20.dp)) }
             Spacer(modifier = Modifier.height(12.dp))
-
-            // Nav items
             items.forEach { item ->
                 val selected = current == item.route
                 Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp))
                         .background(if (selected) Cyan500.copy(alpha = 0.2f) else Color.Transparent)
                         .clickable {
                             if (current != item.route) navController.navigate(item.route) {
-                                popUpTo("nexus") { saveState = true }
-                                launchSingleTop = true; restoreState = true
+                                popUpTo("nexus") { saveState = true }; launchSingleTop = true; restoreState = true
                             }
                         },
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(item.icon, null,
-                            tint = if (selected) Cyan400 else Color(0xFF475569),
-                            modifier = Modifier.size(18.dp))
-                        Text(item.label, style = MaterialTheme.typography.labelMedium.copy(fontSize = 7.sp),
-                            color = if (selected) Cyan400 else Color(0xFF475569))
+                        Icon(item.icon, null, tint = if (selected) Cyan400 else Color(0xFF475569), modifier = Modifier.size(18.dp))
+                        Text(item.label, style = MaterialTheme.typography.labelMedium.copy(fontSize = 7.sp), color = if (selected) Cyan400 else Color(0xFF475569))
                     }
                 }
             }
@@ -148,31 +138,27 @@ fun GameBackground() {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val w = size.width
         val h = size.height
+        val gold = Color(0xFFFFD700)
+        val cyan500 = Color(0xFF06B6D4)
 
-        // Diagonal grid lines
         for (i in -20..40) {
             val x = i * 60f
             drawLine(Color.White.copy(alpha = gridAlpha), Offset(x, 0f), Offset(x - h, h), strokeWidth = 0.5f)
         }
 
-        // Horizontal scan lines
         val scanY = scanLine * h
-        drawLine(Color.Cyan500.copy(alpha = 0.05f), Offset(0f, scanY), Offset(w, scanY), strokeWidth = 80f)
+        drawLine(cyan500.copy(alpha = 0.05f), Offset(0f, scanY), Offset(w, scanY), strokeWidth = 80f)
 
-        // Corner decorations
         val cornerSize = 30f
-        // Top-left
-        drawLine(Color(0xFFFFD700).copy(alpha = 0.3f), Offset(10f, 10f), Offset(10f + cornerSize, 10f), strokeWidth = 2f)
-        drawLine(Color(0xFFFFD700).copy(alpha = 0.3f), Offset(10f, 10f), Offset(10f, 10f + cornerSize), strokeWidth = 2f)
-        // Top-right
-        drawLine(Color(0xFFFFD700).copy(alpha = 0.3f), Offset(w - 10f, 10f), Offset(w - 10f - cornerSize, 10f), strokeWidth = 2f)
-        drawLine(Color(0xFFFFD700).copy(alpha = 0.3f), Offset(w - 10f, 10f), Offset(w - 10f, 10f + cornerSize), strokeWidth = 2f)
+        drawLine(gold.copy(alpha = 0.3f), Offset(10f, 10f), Offset(10f + cornerSize, 10f), strokeWidth = 2f)
+        drawLine(gold.copy(alpha = 0.3f), Offset(10f, 10f), Offset(10f, 10f + cornerSize), strokeWidth = 2f)
+        drawLine(gold.copy(alpha = 0.3f), Offset(w - 10f, 10f), Offset(w - 10f - cornerSize, 10f), strokeWidth = 2f)
+        drawLine(gold.copy(alpha = 0.3f), Offset(w - 10f, 10f), Offset(w - 10f, 10f + cornerSize), strokeWidth = 2f)
 
-        // Floating particles
         for (i in 0..30) {
-            val px = (sin(i * 1.7 + orbPulse * 3) * w * 0.4f + w * 0.5f)
-            val py = (cos(i * 2.1 + orbPulse * 2) * h * 0.4f + h * 0.5f)
-            drawCircle(Color.Cyan500.copy(alpha = 0.2f), 2f, Offset(px, py))
+            val px = (sin(i * 1.7f + orbPulse * 3f) * w * 0.4f + w * 0.5f)
+            val py = (cos(i * 2.1f + orbPulse * 2f) * h * 0.4f + h * 0.5f)
+            drawCircle(cyan500.copy(alpha = 0.2f), 2f, Offset(px, py))
         }
     }
 }
