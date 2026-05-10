@@ -1,17 +1,15 @@
 package com.aura.ai.presentation.screens.home
 
 import android.app.ActivityManager
-import android.os.Build
 import android.os.Environment
 import android.os.StatFs
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -19,112 +17,120 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.aura.ai.data.local.preferences.AuraPreferences
 import com.aura.ai.presentation.theme.*
-import dagger.hilt.android.EntryPointAccessors
 
 @Composable
 fun HomeScreen() {
     val context = LocalContext.current
-    val scrollState = rememberScrollState()
-    val prefs = remember {
-        val appContext = context.applicationContext
-        val entryPoint = EntryPointAccessors.fromApplication(appContext, AuraPreferences::class.java)
-        entryPoint
-    }
-
     val ramInfo = remember { getRamInfo(context) }
     val storageInfo = remember { getStorageInfo() }
 
-    var requestsUsed by remember { mutableIntStateOf(0) }
-    val dailyLimit = 1500
+    val infiniteTransition = rememberInfiniteTransition(label = "orbit")
+    val orbitAngle by infiniteTransition.animateFloat(0f, 360f, infiniteRepeatable(tween(12000, easing = LinearEasing)), label = "angle")
+    val pulse by infiniteTransition.animateFloat(0.6f, 1.2f, infiniteRepeatable(tween(1500), RepeatMode.Reverse), label = "pulse")
 
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val pulse by infiniteTransition.animateFloat(0.5f, 1f, infiniteRepeatable(tween(2000), RepeatMode.Reverse), label = "pulse")
+    Box(modifier = Modifier.fillMaxSize().background(Color.Transparent)) {
+        // Background orbit canvas
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val cx = size.width / 2
+            val cy = size.height / 3.5f
+            val orbitRadius = 130f
 
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(modifier = Modifier.height(16.dp))
+            // Orbit ring
+            drawCircle(Color.Cyan500.copy(alpha = 0.1f), orbitRadius, Offset(cx, cy), style = Stroke(1.5f))
+            drawCircle(Color(0xFFFFD700).copy(alpha = 0.05f), orbitRadius * 0.7f, Offset(cx, cy), style = Stroke(0.8f))
 
-        // Logo
-        Box(contentAlignment = Alignment.Center) {
-            Box(
-                modifier = Modifier.size(90.dp).clip(CircleShape)
-                    .border(2.dp, Cyan500.copy(alpha = pulse * 0.5f), CircleShape)
-                    .background(Cyan500.copy(alpha = 0.05f)),
-                contentAlignment = Alignment.Center
-            ) { Icon(Icons.Default.Memory, null, tint = Cyan400, modifier = Modifier.size(48.dp)) }
-        }
+            // Orbiting dot
+            val dotAngle = orbitAngle * Math.PI / 180f
+            val dotX = cx + orbitRadius * cos(dotAngle).toFloat()
+            val dotY = cy + orbitRadius * sin(dotAngle).toFloat()
+            drawCircle(Color(0xFFFFD700), 6f, Offset(dotX, dotY))
 
-        Spacer(modifier = Modifier.height(16.dp))
-        Text("AURA NEXUS", style = MaterialTheme.typography.headlineLarge, color = Color.White, fontWeight = FontWeight.Black)
-        Text("System Dashboard // Neural Core Online", style = MaterialTheme.typography.labelMedium, color = Cyan400)
+            // Connecting lines from center to stats
+            val lineColor = Color.Cyan500.copy(alpha = 0.08f)
+            drawLine(lineColor, Offset(cx, cy), Offset(cx - 120f, cy + 200f))
+            drawLine(lineColor, Offset(cx, cy), Offset(cx + 130f, cy + 200f))
+            drawLine(lineColor, Offset(cx, cy), Offset(cx - 100f, cy + 350f))
 
-        Spacer(modifier = Modifier.height(28.dp))
-
-        // API Usage
-        SectionHeader("API Usage", Icons.Default.Api, Cyan400)
-        Spacer(modifier = Modifier.height(12.dp))
-        val reqProgress = (requestsUsed.toFloat() / dailyLimit).coerceIn(0f, 1f)
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Send, null, tint = Cyan500, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Gemini Requests", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.weight(1f))
-                    Text("$requestsUsed / $dailyLimit", style = MaterialTheme.typography.bodyMedium, color = Cyan500, fontWeight = FontWeight.Bold)
-                }
-                Spacer(modifier = Modifier.height(10.dp))
-                LinearProgressIndicator(progress = reqProgress, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)), color = Cyan500, trackColor = Color(0xFF1E293B))
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("${(reqProgress * 100).toInt()}% of daily limit used", style = MaterialTheme.typography.bodySmall, color = TextMuted)
+            // Small orbiting dots on rings
+            for (i in 0..5) {
+                val a = (orbitAngle * 0.7f + i * 60f) * Math.PI / 180f
+                drawCircle(Color(0xFFFFD700).copy(alpha = 0.3f), 2f, Offset(cx + orbitRadius * 0.7f * cos(a).toFloat(), cy + orbitRadius * 0.7f * sin(a).toFloat()))
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        // Content
+        Column(
+            modifier = Modifier.fillMaxSize().padding(top = 80.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Center visionary circle
+            Box(contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.size(100.dp * pulse).clip(CircleShape)
+                        .border(2.dp, Cyan500.copy(alpha = 0.4f), CircleShape)
+                        .background(Cyan500.copy(alpha = 0.03f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Memory, null, tint = Cyan400, modifier = Modifier.size(50.dp))
+                }
+            }
 
-        // Device Resources
-        SectionHeader("Device Resources", Icons.Default.Devices, Emerald400)
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MiniStatCard("RAM", ramInfo.first, ramInfo.second, Amber400, Modifier.weight(1f))
-            MiniStatCard("Storage", storageInfo.first, storageInfo.second, Blue400, Modifier.weight(1f))
-            MiniStatCard("CPU", "${Runtime.getRuntime().availableProcessors()} Cores", "Active", Rose400, Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("AURA NEXUS", style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.Black)
+            Text("Vision Core // Neural Online", style = MaterialTheme.typography.labelMedium, color = Cyan400)
+
+            Spacer(modifier = Modifier.height(50.dp))
+
+            // Stat Cards connected via lines
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                NexusStatCard("RAM", ramInfo.first, Amber400)
+                NexusStatCard("Storage", storageInfo.first, Blue400)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                NexusStatCard("Requests", "0/1500", Cyan500)
+                NexusStatCard("Model", "2.5 Flash", Emerald500)
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            NexusStatCard("CPU", "${Runtime.getRuntime().availableProcessors()} Cores Active", Rose400)
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Bottom tip
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A).copy(alpha = 0.8f))
+            ) {
+                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info, null, tint = Cyan400, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Tap NEURAL to chat with Gemini. Add API key in PROTOCOL.", style = MaterialTheme.typography.bodySmall, color = TextMuted)
+                }
+            }
         }
-
-        Spacer(modifier = Modifier.height(32.dp))
-        Text("AURA AI v2.0 // NEXUS CORE", style = MaterialTheme.typography.labelMedium, color = TextMuted)
-        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
 @Composable
-fun SectionHeader(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, accent: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = accent, modifier = Modifier.size(18.dp))
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(title, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.weight(1f))
-        Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(accent))
-    }
-}
-
-@Composable
-fun MiniStatCard(label: String, value: String, sub: String, accent: Color, modifier: Modifier = Modifier) {
-    Card(modifier = modifier, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))) {
-        Column(modifier = Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+fun NexusStatCard(label: String, value: String, accent: Color) {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A).copy(alpha = 0.9f))
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(label, style = MaterialTheme.typography.labelMedium, color = TextMuted)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(value, style = MaterialTheme.typography.titleMedium, color = accent, fontWeight = FontWeight.Bold)
-            Text(sub, style = MaterialTheme.typography.bodySmall, color = TextMuted)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(value, style = MaterialTheme.typography.bodyMedium, color = accent, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -135,12 +141,12 @@ fun getRamInfo(context: android.content.Context): Pair<String, String> {
     am.getMemoryInfo(memInfo)
     val used = (memInfo.totalMem - memInfo.availMem) / (1024 * 1024 * 1024)
     val total = memInfo.totalMem / (1024 * 1024 * 1024)
-    return Pair("${used}GB", "${total}GB Total")
+    return Pair("${used}GB", "${total}GB")
 }
 
 fun getStorageInfo(): Pair<String, String> {
     val stat = StatFs(Environment.getDataDirectory().path)
     val available = stat.availableBlocksLong * stat.blockSizeLong / (1024 * 1024 * 1024)
     val total = stat.blockCountLong * stat.blockSizeLong / (1024 * 1024 * 1024)
-    return Pair("${available}GB Free", "${total}GB Total")
+    return Pair("${available}GB", "${total}GB")
 }
