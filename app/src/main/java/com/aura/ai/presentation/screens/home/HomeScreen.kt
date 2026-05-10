@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aura.ai.presentation.theme.*
+import kotlin.math.*
 
 @Composable
 fun HomeScreen() {
@@ -36,76 +37,60 @@ fun HomeScreen() {
     val pulse by infiniteTransition.animateFloat(0.6f, 1.2f, infiniteRepeatable(tween(1500), RepeatMode.Reverse), label = "pulse")
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Transparent)) {
-        // Background orbit canvas
         Canvas(modifier = Modifier.fillMaxSize()) {
             val cx = size.width / 2
             val cy = size.height / 3.5f
             val orbitRadius = 130f
+            val gold = Color(0xFFFFD700)
+            val cyan500 = Color(0xFF06B6D4)
 
-            // Orbit ring
-            drawCircle(Color.Cyan500.copy(alpha = 0.1f), orbitRadius, Offset(cx, cy), style = Stroke(1.5f))
-            drawCircle(Color(0xFFFFD700).copy(alpha = 0.05f), orbitRadius * 0.7f, Offset(cx, cy), style = Stroke(0.8f))
+            drawCircle(cyan500.copy(alpha = 0.1f), orbitRadius, Offset(cx, cy), style = Stroke(1.5f))
+            drawCircle(gold.copy(alpha = 0.05f), orbitRadius * 0.7f, Offset(cx, cy), style = Stroke(0.8f))
 
-            // Orbiting dot
-            val dotAngle = orbitAngle * Math.PI / 180f
-            val dotX = cx + orbitRadius * cos(dotAngle).toFloat()
-            val dotY = cy + orbitRadius * sin(dotAngle).toFloat()
-            drawCircle(Color(0xFFFFD700), 6f, Offset(dotX, dotY))
+            val dotAngle = orbitAngle * Math.PI.toFloat() / 180f
+            val dotX = cx + orbitRadius * cos(dotAngle)
+            val dotY = cy + orbitRadius * sin(dotAngle)
+            drawCircle(gold, 6f, Offset(dotX, dotY))
 
-            // Connecting lines from center to stats
-            val lineColor = Color.Cyan500.copy(alpha = 0.08f)
-            drawLine(lineColor, Offset(cx, cy), Offset(cx - 120f, cy + 200f))
-            drawLine(lineColor, Offset(cx, cy), Offset(cx + 130f, cy + 200f))
-            drawLine(lineColor, Offset(cx, cy), Offset(cx - 100f, cy + 350f))
+            val lineColor = cyan500.copy(alpha = 0.08f)
+            drawLine(lineColor, Offset(cx, cy), Offset(cx - 120f, cy + 200f), strokeWidth = 1f)
+            drawLine(lineColor, Offset(cx, cy), Offset(cx + 130f, cy + 200f), strokeWidth = 1f)
+            drawLine(lineColor, Offset(cx, cy), Offset(cx - 100f, cy + 350f), strokeWidth = 1f)
 
-            // Small orbiting dots on rings
             for (i in 0..5) {
-                val a = (orbitAngle * 0.7f + i * 60f) * Math.PI / 180f
-                drawCircle(Color(0xFFFFD700).copy(alpha = 0.3f), 2f, Offset(cx + orbitRadius * 0.7f * cos(a).toFloat(), cy + orbitRadius * 0.7f * sin(a).toFloat()))
+                val a = (orbitAngle * 0.7f + i * 60f) * Math.PI.toFloat() / 180f
+                drawCircle(gold.copy(alpha = 0.3f), 2f, Offset(cx + orbitRadius * 0.7f * cos(a), cy + orbitRadius * 0.7f * sin(a)))
             }
         }
 
-        // Content
         Column(
             modifier = Modifier.fillMaxSize().padding(top = 80.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Center visionary circle
             Box(contentAlignment = Alignment.Center) {
                 Box(
                     modifier = Modifier.size(100.dp * pulse).clip(CircleShape)
                         .border(2.dp, Cyan500.copy(alpha = 0.4f), CircleShape)
                         .background(Cyan500.copy(alpha = 0.03f)),
                     contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.Memory, null, tint = Cyan400, modifier = Modifier.size(50.dp))
-                }
+                ) { Icon(Icons.Default.Memory, null, tint = Cyan400, modifier = Modifier.size(50.dp)) }
             }
-
             Spacer(modifier = Modifier.height(12.dp))
             Text("AURA NEXUS", style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.Black)
             Text("Vision Core // Neural Online", style = MaterialTheme.typography.labelMedium, color = Cyan400)
-
             Spacer(modifier = Modifier.height(50.dp))
-
-            // Stat Cards connected via lines
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
                 NexusStatCard("RAM", ramInfo.first, Amber400)
                 NexusStatCard("Storage", storageInfo.first, Blue400)
             }
-
             Spacer(modifier = Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
                 NexusStatCard("Requests", "0/1500", Cyan500)
                 NexusStatCard("Model", "2.5 Flash", Emerald500)
             }
-
             Spacer(modifier = Modifier.height(12.dp))
             NexusStatCard("CPU", "${Runtime.getRuntime().availableProcessors()} Cores Active", Rose400)
-
             Spacer(modifier = Modifier.weight(1f))
-
-            // Bottom tip
             Card(
                 modifier = Modifier.fillMaxWidth().padding(24.dp),
                 shape = RoundedCornerShape(16.dp),
@@ -137,8 +122,7 @@ fun NexusStatCard(label: String, value: String, accent: Color) {
 
 fun getRamInfo(context: android.content.Context): Pair<String, String> {
     val am = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as ActivityManager
-    val memInfo = ActivityManager.MemoryInfo()
-    am.getMemoryInfo(memInfo)
+    val memInfo = ActivityManager.MemoryInfo(); am.getMemoryInfo(memInfo)
     val used = (memInfo.totalMem - memInfo.availMem) / (1024 * 1024 * 1024)
     val total = memInfo.totalMem / (1024 * 1024 * 1024)
     return Pair("${used}GB", "${total}GB")
