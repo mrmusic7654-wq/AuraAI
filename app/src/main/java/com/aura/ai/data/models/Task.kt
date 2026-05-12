@@ -30,6 +30,6 @@ data class AgentAction(
     val packageName: String? = null
 )
 
-enum class ActionType { TAP, SWIPE, TYPE, BACK, HOME, RECENTS, WAIT, OPEN_APP, FIND_AND_TAP }
+enum class ActionType { TAP, SWIPE, TYPE, BACK, HOME, RECENTS, WAIT, OPEN_APP, FIND_AND_TAP, SCREENSHOT, SCROLL }
 
 data class TaskResult(val success: Boolean = false, val message: String = "")
