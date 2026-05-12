@@ -27,11 +27,7 @@ object AppModule {
     fun providePreferences(@ApplicationContext c: Context) = AuraPreferences(c)
 
     @Provides @Singleton
-    fun provideGenerativeModel() = GenerativeModel(
-        modelName = "gemini-2.5-flash",
-        apiKey = "",
-        generationConfig = generationConfig { temperature = 0.7f; topK = 40; topP = 0.95f; maxOutputTokens = 2048 }
-    )
+    fun provideGenerativeModel() = GenerativeModel("gemini-2.5-flash", "", generationConfig { temperature = 0.7f })
 
     @Provides @Singleton
     fun provideScreenStateManager() = ScreenStateManager()
