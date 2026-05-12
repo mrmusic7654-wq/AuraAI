@@ -19,6 +19,7 @@ val Violet500 = Color(0xFF8B5CF6)
 val Rose400 = Color(0xFFFB7185)
 val Blue400 = Color(0xFF60A5FA)
 val Indigo400 = Color(0xFF818CF8)
+val Gold = Color(0xFFFFD700)
 
 val TextPrimary = Color(0xFFF1F5F9)
 val TextSecondary = Color(0xFF94A3B8)
