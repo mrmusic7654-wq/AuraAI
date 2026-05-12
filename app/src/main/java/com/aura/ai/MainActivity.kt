@@ -75,19 +75,14 @@ fun AuraMainScreen() {
     Row(modifier = Modifier.fillMaxSize().background(Color(0xFF020617))) {
         // Left Navigation Rail
         Column(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(56.dp)
-                .background(Color(0xFF020617).copy(alpha = 0.98f))
-                .verticalScroll(rememberScrollState())
-                .padding(top = 20.dp, bottom = 20.dp),
+            modifier = Modifier.fillMaxHeight().width(56.dp).background(Color(0xFF020617).copy(alpha = 0.98f))
+                .verticalScroll(rememberScrollState()).padding(top = 20.dp, bottom = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Box(
-                modifier = Modifier.size(36.dp).clip(CircleShape).background(Cyan500.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
-            ) { Icon(Icons.Default.Memory, null, tint = Cyan400, modifier = Modifier.size(20.dp)) }
+            Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(Cyan500.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Memory, null, tint = Cyan400, modifier = Modifier.size(20.dp))
+            }
             Spacer(modifier = Modifier.height(12.dp))
             items.forEach { item ->
                 val selected = current == item.route
@@ -136,29 +131,16 @@ fun GameBackground() {
     val orbPulse by infiniteTransition.animateFloat(0.5f, 1f, infiniteRepeatable(tween(2000), RepeatMode.Reverse), label = "orb")
 
     Canvas(modifier = Modifier.fillMaxSize()) {
-        val w = size.width
-        val h = size.height
-        val gold = Color(0xFFFFD700)
-        val cyan500 = Color(0xFF06B6D4)
+        val w = size.width; val h = size.height
+        val gold = Color(0xFFFFD700); val cyan500 = Color(0xFF06B6D4)
 
-        for (i in -20..40) {
-            val x = i * 60f
-            drawLine(Color.White.copy(alpha = gridAlpha), Offset(x, 0f), Offset(x - h, h), strokeWidth = 0.5f)
-        }
-
-        val scanY = scanLine * h
-        drawLine(cyan500.copy(alpha = 0.05f), Offset(0f, scanY), Offset(w, scanY), strokeWidth = 80f)
-
+        for (i in -20..40) { val x = i * 60f; drawLine(Color.White.copy(alpha = gridAlpha), Offset(x, 0f), Offset(x - h, h), strokeWidth = 0.5f) }
+        val scanY = scanLine * h; drawLine(cyan500.copy(alpha = 0.05f), Offset(0f, scanY), Offset(w, scanY), strokeWidth = 80f)
         val cornerSize = 30f
         drawLine(gold.copy(alpha = 0.3f), Offset(10f, 10f), Offset(10f + cornerSize, 10f), strokeWidth = 2f)
         drawLine(gold.copy(alpha = 0.3f), Offset(10f, 10f), Offset(10f, 10f + cornerSize), strokeWidth = 2f)
         drawLine(gold.copy(alpha = 0.3f), Offset(w - 10f, 10f), Offset(w - 10f - cornerSize, 10f), strokeWidth = 2f)
         drawLine(gold.copy(alpha = 0.3f), Offset(w - 10f, 10f), Offset(w - 10f, 10f + cornerSize), strokeWidth = 2f)
-
-        for (i in 0..30) {
-            val px = (sin(i * 1.7f + orbPulse * 3f) * w * 0.4f + w * 0.5f)
-            val py = (cos(i * 2.1f + orbPulse * 2f) * h * 0.4f + h * 0.5f)
-            drawCircle(cyan500.copy(alpha = 0.2f), 2f, Offset(px, py))
-        }
+        for (i in 0..30) { val px = (sin(i * 1.7f + orbPulse * 3f) * w * 0.4f + w * 0.5f); val py = (cos(i * 2.1f + orbPulse * 2f) * h * 0.4f + h * 0.5f); drawCircle(cyan500.copy(alpha = 0.2f), 2f, Offset(px, py)) }
     }
 }
