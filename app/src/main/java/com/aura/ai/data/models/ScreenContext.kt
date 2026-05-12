@@ -8,7 +8,7 @@ data class ScreenContext(
     val screenWidth: Int = 0,
     val screenHeight: Int = 0
 ) {
-    fun toTextRepresentation(): String = "Package: $packageName, Activity: $activityName, Elements: ${elements.size}"
+    fun toTextRepresentation(): String = "Package: $packageName\nActivity: $activityName\nElements: ${elements.size}"
 }
 
 data class UIElement(
