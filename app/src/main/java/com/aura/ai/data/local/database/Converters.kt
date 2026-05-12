@@ -27,5 +27,5 @@ class Converters {
     fun fromActionsList(actions: List<AgentAction>): String = json.encodeToString(actions)
 
     @TypeConverter
-    fun toActionsList(value: String): List<AgentAction> = json.decodeFromString(value)
+    fun toActionsList(value: String): List<AgentAction> = try { json.decodeFromString(value) } catch (e: Exception) { emptyList() }
 }
