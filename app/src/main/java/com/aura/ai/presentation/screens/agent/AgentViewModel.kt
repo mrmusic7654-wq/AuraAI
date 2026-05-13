@@ -105,7 +105,7 @@ class AgentViewModel @Inject constructor(
     // ===== PHONE CONTROL =====
     private suspend fun executePhoneCommand(input: String): String? {
         val lower = input.lowercase().trim()
-        val service = AuraAccessibilityService.instance? = null
+        val service = AuraAccessibilityService.instance ?: return null
 
         if (lower.startsWith("open ")) {
             val appName = lower.removePrefix("open ").trim()
