@@ -12,9 +12,11 @@ import com.aura.ai.data.local.entities.*
         AutomationRuleEntity::class,
         AppUsageEntity::class,
         ScreenElementEntity::class,
-        GitHubRepoEntity::class
+        GitHubRepoEntity::class,
+        ScheduledTaskEntity::class,
+        SwarmAgentEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -24,4 +26,6 @@ abstract class AuraDatabase : RoomDatabase() {
     abstract fun appUsageDao(): AppUsageDao
     abstract fun screenElementDao(): ScreenElementDao
     abstract fun gitHubRepoDao(): GitHubRepoDao
+    abstract fun scheduledTaskDao(): ScheduledTaskDao
+    abstract fun swarmAgentDao(): SwarmAgentDao
 }
