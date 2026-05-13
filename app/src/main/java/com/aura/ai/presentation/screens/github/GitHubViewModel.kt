@@ -152,4 +152,59 @@ class GitHubViewModel @Inject constructor(
     fun hideRepoDetail() { _state.value = _state.value.copy(showRepoDetail = false, workflowRuns = emptyList()) }
     fun hideFileViewer() { _state.value = _state.value.copy(showFileViewer = false) }
     fun clearResult() { _state.value = _state.value.copy(result = "") }
+    fun triggerWorkflow(fullName: String, workflowId: Long) {
+    val token = getToken() ?: return
+    viewModelScope.launch {
+        _state.value = _state.value.copy(isLoading = true)
+        withContext(Dispatchers.IO) {
+            try {
+                val body = """{"ref":"main"}"""
+                val req = Request.Builder()
+                    .url("https://api.github.com/repos/$fullName/actions/workflows/$workflowId/dispatches")
+                    .header("Authorization", "Bearer $token")
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .post(body.toRequestBody("application/json".toMediaType()))
+                    .build()
+                val resp = client.newCall(req).execute()
+                _state.value = _state.value.copy(isLoading = false, result = if (resp.isSuccessful) "🚀 Workflow triggered" else "❌ ${resp.message}")
+                if (resp.isSuccessful) loadWorkflowRuns(fullName)
+            } catch (e: Exception) { _state.value = _state.value.copy(isLoading = false, result = "❌ ${e.message}") }
+        }
+    }
+}
+
+fun startEditFile(path: String, content: String) {
+    _state.value = _state.value.copy(isEditingFile = true, editFilePath = path, editFileContent = content)
+}
+
+fun updateEditContent(content: String) {
+    _state.value = _state.value.copy(editFileContent = content)
+}
+
+fun updateFile(fullName: String, path: String, newContent: String, message: String) {
+    val token = getToken() ?: return
+    viewModelScope.launch {
+        _state.value = _state.value.copy(isCreating = true)
+        withContext(Dispatchers.IO) {
+            try {
+                val getReq = Request.Builder().url("https://api.github.com/repos/$fullName/contents/$path")
+                    .header("Authorization", "Bearer $token").header("Accept", "application/vnd.github.v3+json").build()
+                val getResp = client.newCall(getReq).execute()
+                val sha = if (getResp.isSuccessful) JSONObject(getResp.body?.string() ?: "{}").optString("sha", "") else ""
+                val encoded = android.util.Base64.encodeToString(newContent.toByteArray(), android.util.Base64.NO_WRAP)
+                val body = """{"message":"$message","content":"$encoded"${if (sha.isNotBlank()) ""","sha":"$sha"""" else ""}}"""
+                val req = Request.Builder().url("https://api.github.com/repos/$fullName/contents/$path")
+                    .header("Authorization", "Bearer $token").header("Accept", "application/vnd.github.v3+json")
+                    .put(body.toRequestBody("application/json".toMediaType())).build()
+                val resp = client.newCall(req).execute()
+                _state.value = _state.value.copy(isCreating = false, result = if (resp.isSuccessful) "✅ Updated $path" else "❌ ${resp.message}", isEditingFile = false)
+                if (resp.isSuccessful) loadFileContent(fullName, path)
+            } catch (e: Exception) { _state.value = _state.value.copy(isCreating = false, result = "❌ ${e.message}") }
+        }
+    }
+}
+
+fun cancelEditFile() {
+    _state.value = _state.value.copy(isEditingFile = false)
+}
 }
