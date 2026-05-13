@@ -5,7 +5,8 @@ import androidx.room.PrimaryKey
 
 @Entity(tableName = "swarm_agents")
 data class SwarmAgentEntity(
-    @PrimaryKey val id: String,
+    @PrimaryKey
+    val id: String,
     val name: String,
     val type: String,
     val apiKey: String,
