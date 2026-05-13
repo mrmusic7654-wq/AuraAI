@@ -23,13 +23,13 @@ import javax.inject.Inject
 class AuraAccessibilityService : AccessibilityService() {
 
     @Inject
+    lateinit var screenStateManager: ScreenStateManager
+    
     companion object {
     var instance: AuraAccessibilityService? = null
         private set
     }
     
-    lateinit var screenStateManager: ScreenStateManager
-
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val _screenState = MutableStateFlow<ScreenContext?>(null)
     val screenState: StateFlow<ScreenContext?> = _screenState.asStateFlow()
