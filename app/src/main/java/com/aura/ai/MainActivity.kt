@@ -31,6 +31,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.aura.ai.presentation.screens.agent.AgentScreen
+import com.aura.ai.presentation.screens.github.GitHubScreen
 import com.aura.ai.presentation.screens.home.HomeScreen
 import com.aura.ai.presentation.screens.market.MarketScreen
 import com.aura.ai.presentation.screens.matrix.MatrixScreen
@@ -41,6 +42,7 @@ import com.aura.ai.presentation.screens.swarm.SwarmScreen
 import com.aura.ai.presentation.screens.tasks.TasksScreen
 import com.aura.ai.presentation.screens.vault.VaultScreen
 import com.aura.ai.presentation.theme.*
+import com.aura.ai.services.FloatingMonitorService
 import dagger.hilt.android.AndroidEntryPoint
 import kotlin.math.*
 
@@ -57,12 +59,15 @@ data class NavItem(val route: String, val icon: ImageVector, val label: String)
 @Composable
 fun AuraMainScreen() {
     val navController = rememberNavController()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     val items = listOf(
         NavItem("nexus", Icons.Default.Circle, "NX"),
         NavItem("neural", Icons.Default.Psychology, "NR"),
         NavItem("tasks", Icons.Default.Assignment, "TK"),
         NavItem("scheduler", Icons.Default.Schedule, "SC"),
         NavItem("swarm", Icons.Default.Hub, "SW"),
+        NavItem("github", Icons.Default.Code, "GH"),
         NavItem("protocol", Icons.Default.Security, "PR"),
         NavItem("vault", Icons.Default.Folder, "VT"),
         NavItem("netsurfer", Icons.Default.Language, "NT"),
@@ -104,7 +109,7 @@ fun AuraMainScreen() {
             }
         }
 
-        // Main Content Area
+        // Main Content
         Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
             GameBackground()
             NavHost(navController, startDestination = "nexus") {
@@ -113,6 +118,7 @@ fun AuraMainScreen() {
                 composable("tasks") { TasksScreen() }
                 composable("scheduler") { SchedulerScreen() }
                 composable("swarm") { SwarmScreen() }
+                composable("github") { GitHubScreen() }
                 composable("protocol") { SettingsScreen() }
                 composable("vault") { VaultScreen() }
                 composable("netsurfer") { NetSurferScreen() }
@@ -131,16 +137,14 @@ fun GameBackground() {
     val orbPulse by infiniteTransition.animateFloat(0.5f, 1f, infiniteRepeatable(tween(2000), RepeatMode.Reverse), label = "orb")
 
     Canvas(modifier = Modifier.fillMaxSize()) {
-        val w = size.width; val h = size.height
-        val gold = Color(0xFFFFD700); val cyan500 = Color(0xFF06B6D4)
-
-        for (i in -20..40) { val x = i * 60f; drawLine(Color.White.copy(alpha = gridAlpha), Offset(x, 0f), Offset(x - h, h), strokeWidth = 0.5f) }
-        val scanY = scanLine * h; drawLine(cyan500.copy(alpha = 0.05f), Offset(0f, scanY), Offset(w, scanY), strokeWidth = 80f)
-        val cornerSize = 30f
-        drawLine(gold.copy(alpha = 0.3f), Offset(10f, 10f), Offset(10f + cornerSize, 10f), strokeWidth = 2f)
-        drawLine(gold.copy(alpha = 0.3f), Offset(10f, 10f), Offset(10f, 10f + cornerSize), strokeWidth = 2f)
-        drawLine(gold.copy(alpha = 0.3f), Offset(w - 10f, 10f), Offset(w - 10f - cornerSize, 10f), strokeWidth = 2f)
-        drawLine(gold.copy(alpha = 0.3f), Offset(w - 10f, 10f), Offset(w - 10f, 10f + cornerSize), strokeWidth = 2f)
-        for (i in 0..30) { val px = (sin(i * 1.7f + orbPulse * 3f) * w * 0.4f + w * 0.5f); val py = (cos(i * 2.1f + orbPulse * 2f) * h * 0.4f + h * 0.5f); drawCircle(cyan500.copy(alpha = 0.2f), 2f, Offset(px, py)) }
+        val w = size.width; val h = size.height; val gold = Color(0xFFFFD700); val cyan = Color(0xFF06B6D4)
+        for (i in -20..40) drawLine(Color.White.copy(alpha = gridAlpha), Offset(i * 60f, 0f), Offset(i * 60f - h, h), strokeWidth = 0.5f)
+        val sy = scanLine * h; drawLine(cyan.copy(alpha = 0.05f), Offset(0f, sy), Offset(w, sy), strokeWidth = 80f)
+        val cs = 30f
+        drawLine(gold.copy(alpha = 0.3f), Offset(10f, 10f), Offset(10f + cs, 10f), strokeWidth = 2f)
+        drawLine(gold.copy(alpha = 0.3f), Offset(10f, 10f), Offset(10f, 10f + cs), strokeWidth = 2f)
+        drawLine(gold.copy(alpha = 0.3f), Offset(w - 10f, 10f), Offset(w - 10f - cs, 10f), strokeWidth = 2f)
+        drawLine(gold.copy(alpha = 0.3f), Offset(w - 10f, 10f), Offset(w - 10f, 10f + cs), strokeWidth = 2f)
+        for (i in 0..30) { val px = sin(i * 1.7f + orbPulse * 3f) * w * 0.4f + w * 0.5f; val py = cos(i * 2.1f + orbPulse * 2f) * h * 0.4f + h * 0.5f; drawCircle(cyan.copy(alpha = 0.2f), 2f, Offset(px, py)) }
     }
 }
