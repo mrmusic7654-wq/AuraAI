@@ -23,6 +23,11 @@ import javax.inject.Inject
 class AuraAccessibilityService : AccessibilityService() {
 
     @Inject
+    companion object {
+    var instance: AuraAccessibilityService? = null
+        private set
+    }
+    
     lateinit var screenStateManager: ScreenStateManager
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -32,8 +37,9 @@ class AuraAccessibilityService : AccessibilityService() {
     private val actionChannel = Channel<AccessibilityAction>(Channel.UNLIMITED)
 
     override fun onCreate() {
-        super.onCreate()
-        Timber.d("Accessibility Service Created")
+    super.onCreate()
+    instance = this
+    Timber.d("Accessibility Service Created")
     }
 
     override fun onServiceConnected() {
@@ -63,9 +69,10 @@ class AuraAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
-        serviceScope.cancel()
-        Timber.d("Accessibility Service Destroyed")
+    super.onDestroy()
+    instance = null
+    serviceScope.cancel()
+    Timber.d("Accessibility Service Destroyed")
     }
 
     fun captureCurrentScreen(): ScreenContext? {
