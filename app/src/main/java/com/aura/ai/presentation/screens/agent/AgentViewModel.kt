@@ -329,18 +329,6 @@ class AgentViewModel @Inject constructor(
         service.dispatchGesture(gesture, null, null)
     }
 
-    private fun swipeScreen(service: AuraAccessibilityService?, right: Boolean) {
-        if (service == null) return
-        val display = service.resources.displayMetrics
-        val path = if (right) {
-            android.graphics.Path().apply { moveTo(display.widthPixels * 0.2f, display.heightPixels / 2f); lineTo(display.widthPixels * 0.8f, display.heightPixels / 2f) }
-        } else {
-            android.graphics.Path().apply { moveTo(display.widthPixels * 0.8f, display.heightPixels / 2f); lineTo(display.widthPixels * 0.2f, display.heightPixels / 2f) }
-        }
-        val gesture = android.accessibilityservice.GestureDescription.Builder().addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 300)).build()
-        service.dispatchGesture(gesture, null, null)
-    }
-
     private fun findNodeByText(node: android.view.accessibility.AccessibilityNodeInfo, text: String): android.view.accessibility.AccessibilityNodeInfo? {
         if (node.text?.contains(text, true) == true || node.contentDescription?.contains(text, true) == true) return node
         for (i in 0 until node.childCount) { node.getChild(i)?.let { findNodeByText(it, text) }?.let { return it } }
