@@ -171,8 +171,79 @@ class AgentViewModel @Inject constructor(
                 "📄 $path (${content.length} chars):\n\n${if (content.length > 2000) content.take(2000) + "\n\n... (truncated)" else content}"
             } catch (e: Exception) { "❌ ${e.message}" }
         }
+        // CREATE APP - Multi-pass generation
+        if ((lower.startsWith("create app") || lower.startsWith("build app") || lower.startsWith("make app")) && !lower.contains("repo")) {
+         val appDesc = input.replace(Regex("(?i)(create|build|make) app"), "").trim()
+          val appName = appDesc.split(" ").firstOrNull()?.replace(" ", "-")?.take(39) ?: "MyApp"
+         val description = if (appDesc.split(" ").size > 1) appDesc.substringAfter(" ").trim() else "A simple app"
+            return createAppFromDescription(token, key, appName, description)
+}
         return null
     }
+        private suspend fun createAppFromDescription(token: String, key: String, appName: String, description: String): String {
+        _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("🔍 Planning file structure for '$appName'...", false))
+        
+        // Step 1: Generate file list
+        val fileList = generateFileList(key, appName, description)
+        if (fileList.isEmpty()) return "❌ Could not generate file structure. Try a more detailed description."
+        val totalFiles = fileList.size
+        _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("📋 Planned $totalFiles files.", false))
+        
+        // Step 2: Create repo
+        val createResult = githubApi(token, "POST", "https://api.github.com/user/repos", """{"name":"$appName","private":false,"auto_init":false}""")
+        if (createResult.startsWith("❌")) return "❌ Failed to create repo: $createResult"
+        val userResult = githubApi(token, "GET", "https://api.github.com/user", null)
+        val owner = Regex("\"login\":\"([^\"]+)\"").find(userResult)?.groupValues?.get(1) ?: return "Could not get GitHub username."
+        activeOwner = owner; activeRepo = appName
+        
+        // Step 3: Generate files in batches
+        val batchSize = 40
+        val batches = fileList.chunked(batchSize)
+        val allFiles = mutableMapOf<String, String>()
+        var contextSummary = "Starting: $appName"
+        var totalPushed = 0
+        
+        for ((batchNum, batch) in batches.withIndex()) {
+            val batchLabel = "${batchNum + 1}/${batches.size}"
+            _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("📝 Batch $batchLabel: Generating ${batch.size} files...", false))
+            
+            val generated = generateBatchFiles(key, appName, description, batch, allFiles, batchNum + 1, batches.size, contextSummary)
+            allFiles.putAll(generated)
+            
+            // Push this batch to GitHub
+            generated.forEach { (path, content) ->
+                val encoded = android.util.Base64.encodeToString(content.toByteArray(), android.util.Base64.NO_WRAP)
+                val pushResult = githubApi(token, "PUT", "https://api.github.com/repos/$owner/$appName/contents/$path", """{"message":"Add $path (batch $batchLabel)","content":"$encoded"}""")
+                if (!pushResult.startsWith("❌")) totalPushed++
+            }
+            
+            contextSummary = buildContextSummary(allFiles, batchNum + 1, batches.size)
+            _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("✅ Batch $batchLabel: ${generated.size} generated, $totalPushed total pushed.", false))
+        }
+        
+        // Step 4: Add CI workflow if it's an Android project
+        if (description.contains("Android") || description.contains("Kotlin") || description.contains("Compose") || fileList.any { it.contains("build.gradle") }) {
+            val workflowYml = """
+name: Build $appName
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {java-version: '17', distribution: 'temurin'}
+      - run: chmod +x gradlew
+      - run: ./gradlew assembleDebug
+      - uses: actions/upload-artifact@v4
+        with: {name: ${appName}-debug, path: app/build/outputs/apk/debug/app-debug.apk}
+            """.trimIndent()
+            val encodedWf = android.util.Base64.encodeToString(workflowYml.toByteArray(), android.util.Base64.NO_WRAP)
+            githubApi(token, "PUT", "https://api.github.com/repos/$owner/$appName/contents/.github/workflows/build.yml", """{"message":"Add CI workflow","content":"$encodedWf"}""")
+        }
+        
+        return "✅ APP CREATED: $appName\n📁 github.com/$owner/$appName\n📄 $totalPushed/$totalFiles files pushed\n🧠 ${batches.size} passes used\n\nCommands:\n• browse repo $owner/$appName\n• fix file path: instruction\n• add file path: description"
+        }
 
     // ===== GITHUB COMMANDS =====
     private suspend fun executeGitHubCommand(input: String): String? {
@@ -282,6 +353,88 @@ class AgentViewModel @Inject constructor(
             else "📄 $owner/$repo/$path (${formatSize(size.toLong())})\n\n$decoded"
         } catch (e: Exception) { "❌ ${e.message}" }
     }
+
+    // ============================================
+// MULTI-PASS APP GENERATION
+// ============================================
+
+private suspend fun generateFileList(key: String, appName: String, description: String): List<String> {
+    val model = GenerativeModel("gemini-2.5-flash", key, generationConfig { temperature = 0.2f; maxOutputTokens = 4096 })
+    val prompt = """
+        Generate a COMPLETE file list for an app: "$appName"
+        Description: $description
+        Include every file needed for a compilable app. Be thorough.
+        ${if (description.contains("Android") || description.contains("Kotlin") || description.contains("Compose") || description.contains("Jetpack"))
+            "Use: AGP 8.2.0, Kotlin 1.9.22, Compose BOM 2023.10.01, Min SDK 26, Material 3. Include build files, manifest, all Kotlin sources, resources, theme, CI workflow."
+          else if (description.contains("Python") || description.contains("Flask") || description.contains("FastAPI") || description.contains("Django"))
+            "Use Python with requirements.txt, Dockerfile, main application file, tests, README."
+          else if (description.contains("React") || description.contains("JavaScript") || description.contains("TypeScript"))
+            "Use React/Vite with package.json, components, styles, public folder, CI config."
+          else
+            "Generate the appropriate files for this type of project."}
+        Return ONLY a JSON array: ["path/file1","path/file2",...]
+        Generate ${if (description.length > 200) "40-80" else "15-30"} files based on complexity.
+    """.trimIndent()
+    return try {
+        val resp = model.generateContent(content { text(prompt) }).text ?: return emptyList()
+        val jsonStr = resp.substringAfter("[").substringBeforeLast("]").let { "[$it]" }
+        (0 until org.json.JSONArray(jsonStr).length()).map { org.json.JSONArray(jsonStr).getString(it) }
+    } catch (e: Exception) { emptyList() }
+}
+
+private suspend fun generateBatchFiles(
+    key: String, appName: String, description: String,
+    batch: List<String>, existingFiles: Map<String, String>,
+    batchNum: Int, totalBatches: Int, contextSummary: String
+): Map<String, String> {
+    val model = GenerativeModel("gemini-2.5-flash", key, generationConfig { temperature = 0.2f; maxOutputTokens = 60000 })
+    val existingPaths = if (existingFiles.isNotEmpty()) {
+        "ALREADY GENERATED (${existingFiles.size} files):\n${existingFiles.keys.take(15).joinToString("\n") { "  ✅ $it" }}"
+    } else "No files generated yet."
+    
+    val prompt = """
+        Generate COMPLETE content for batch $batchNum/$totalBatches of app: "$appName"
+        Description: $description
+        Context from previous batches: $contextSummary
+        
+        $existingPaths
+        
+        FILES TO GENERATE NOW (${batch.size} files):
+        ${batch.joinToString("\n") { "  ⏳ $it" }}
+        
+        IMPORTANT: These files must be consistent with already-generated code.
+        Use the same class names, package names, and patterns.
+        Return ONLY valid JSON: {"files":[{"path":"path/to/file","content":"complete file content here"}]}
+        Each content must be COMPLETE compilable code, NOT placeholders.
+        Use \\n for newlines and \\\" for quotes inside JSON strings.
+    """.trimIndent()
+    
+    return try {
+        val resp = model.generateContent(content { text(prompt) }).text ?: return emptyMap()
+        val jsonStr = resp.substringAfter("{").substringBeforeLast("}").let { "{$it}" }
+        val obj = org.json.JSONObject(jsonStr)
+        val filesArr = obj.getJSONArray("files")
+        val result = mutableMapOf<String, String>()
+        for (i in 0 until filesArr.length()) {
+            val f = filesArr.getJSONObject(i)
+            val path = f.getString("path")
+            val content = f.getString("content")
+                .replace("\\n", "\n").replace("\\t", "\t")
+                .replace("\\\"", "\"").replace("\\\\", "\\")
+            result[path] = content
+        }
+        result
+    } catch (e: Exception) { emptyMap() }
+}
+
+private fun buildContextSummary(files: Map<String, String>, passNum: Int, totalPasses: Int): String {
+    val keyFiles = files.keys.filter {
+        it.contains("Main") || it.contains("App") || it.contains("build.gradle") ||
+        it.contains("AndroidManifest") || it.contains("main") || it.contains("index") ||
+        it.contains("package.json") || it.contains("requirements.txt")
+    }.take(5)
+    return "Pass $passNum/$totalPasses done. ${files.size} files generated. Key files: ${keyFiles.joinToString(", ")}."
+}
 
     // ===== ACCESSIBILITY HELPERS =====
     private fun tapOnText(service: AuraAccessibilityService?, text: String): Boolean {
