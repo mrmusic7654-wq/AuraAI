@@ -136,7 +136,7 @@ class AgentViewModel @Inject constructor(
 
     // ===== GITHUB COMMANDS =====
     private suspend fun executeGitHubCommand(input: String): String? {
-        val token = preferences.getGitHubToken().ifBlank { return null }
+        val token = preferences.getGitHubToken()?.ifBlank { return null } ?: return null
         val lower = input.lowercase()
         val key = preferences.getApiKey().ifBlank { return "No Gemini API key set." }
 
@@ -219,7 +219,7 @@ class AgentViewModel @Inject constructor(
 
     // ===== GEMINI FALLBACK =====
     private suspend fun askGemini(input: String): String {
-        val key = preferences.getApiKey().ifBlank { return "No API key set. Add it in Protocol settings." }
+        val key = preferences.getApiKey()?.ifBlank { return "No API key set. Add it in Protocol settings." } ?: return "No API key set. Add it in Protocol settings."
         return try { GenerativeModel("gemini-2.5-flash", key, generationConfig { temperature = 0.7f; maxOutputTokens = 2048 }).generateContent(content { text(input) }).text ?: "No response." } catch (e: Exception) { if (e.message?.contains("503") == true) "Busy." else "Error: ${e.message}" }
     }
 
