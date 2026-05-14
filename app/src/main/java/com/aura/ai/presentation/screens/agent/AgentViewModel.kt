@@ -36,8 +36,9 @@ data class AgentUiState(
 ⚡ AURA ONLINE - NEURAL CORE ACTIVE
 
 📱 Phone: open [app] | home | back | screenshot | scroll | tap on [text] | type [text] | swipe left/right
-🐙 GitHub: create repo [name] | list repos | compile repo [owner/repo] | browse repo [owner/repo] | read repo file [o/r] [path]
-📂 Files: list files | search files [query] | delete file [path] | read file [path]
+💻 Create App: create app MyApp [description] — generates complete apps via multi-pass Gemini
+🐙 GitHub: create repo [name] | list repos | compile repo [o/r] | browse repo [o/r] | read repo file [o/r] [path]
+📂 Files: list files | search files [q] | delete file [path] | read file [path]
 📊 System: device info | time
 ⏯️ Control: pause | resume | stop
         """.trimIndent(), false)
@@ -80,7 +81,7 @@ class AgentViewModel @Inject constructor(
         }
     }
 
-    // ===== CONTROL =====
+    // ===== CONTROL COMMANDS =====
     private fun handleControlCommand(input: String): Boolean {
         when (input.lowercase().trim()) {
             "pause", "pause task" -> {
@@ -107,35 +108,17 @@ class AgentViewModel @Inject constructor(
         val lower = input.lowercase().trim()
         val service = AuraAccessibilityService.instance ?: return null
 
-        if (lower.startsWith("open ")) {
-            val appName = lower.removePrefix("open ").trim()
-            val pkg = resolveAppPackage(appName)
-            if (pkg != null) {
-                try {
-                    val intent = com.aura.ai.AuraApplication.instance.packageManager.getLaunchIntentForPackage(pkg)
-                    if (intent != null) { intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); com.aura.ai.AuraApplication.instance.startActivity(intent); return "✅ Opened $appName" }
-                } catch (e: Exception) { return "❌ ${e.message}" }
-            }
-            return "❌ Unknown app: $appName"
-        }
-        if (lower == "home") { service?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME); return "🏠 Home" }
-        if (lower == "back") { service?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK); return "⬅️ Back" }
-        if (lower == "recents") { service?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS); return "📱 Recents" }
-        if (lower == "notifications") { service?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS); return "🔔 Notifications" }
-        if (lower == "quick settings") { service?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS); return "⚙️ Quick settings" }
-        if (lower == "screenshot") { service?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT); return "📸 Screenshot" }
+        if (lower.startsWith("open ")) { val n = lower.removePrefix("open ").trim(); val p = resolveAppPackage(n); if (p != null) { try { val i = com.aura.ai.AuraApplication.instance.packageManager.getLaunchIntentForPackage(p); if (i != null) { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); com.aura.ai.AuraApplication.instance.startActivity(i); return "✅ Opened $n" } } catch (e: Exception) { return "❌ ${e.message}" } }; return "❌ Unknown: $n" }
+        if (lower == "home") { service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME); return "🏠 Home" }
+        if (lower == "back") { service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK); return "⬅️ Back" }
+        if (lower == "recents") { service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS); return "📱 Recents" }
+        if (lower == "notifications") { service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS); return "🔔 Notifications" }
+        if (lower == "quick settings") { service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS); return "⚙️ Quick settings" }
+        if (lower == "screenshot") { service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT); return "📸 Screenshot" }
         if (lower == "scroll down") { scrollScreen(service, false); return "👇 Scrolled" }
         if (lower == "scroll up") { scrollScreen(service, true); return "👆 Scrolled" }
-        if (lower.startsWith("tap on ")) {
-            val target = lower.removePrefix("tap on ").trim()
-            val success = tapOnText(service, target)
-            return if (success) "👆 Tapped '$target'" else "❌ Could not find '$target'"
-        }
-        if (lower.startsWith("type ")) {
-            val text = input.removePrefix("type ").trim()
-            val success = typeText(service, text)
-            return if (success) "⌨️ Typed" else "❌ Could not type"
-        }
+        if (lower.startsWith("tap on ")) { val t = lower.removePrefix("tap on ").trim(); return if (tapOnText(service, t)) "👆 Tapped '$t'" else "❌ Not found" }
+        if (lower.startsWith("type ")) { return if (typeText(service, input.removePrefix("type ").trim())) "⌨️ Typed" else "❌ Failed" }
         if (lower == "swipe left") { swipeScreen(service, false); return "👈 Swiped" }
         if (lower == "swipe right") { swipeScreen(service, true); return "👉 Swiped" }
         return null
@@ -144,164 +127,187 @@ class AgentViewModel @Inject constructor(
     // ===== FILE COMMANDS =====
     private fun executeFileCommand(input: String): String? {
         val lower = input.lowercase().trim()
-        if (lower.startsWith("list files")) {
-            val path = input.replace(Regex("(?i)list files"), "").trim().ifBlank { Environment.getExternalStorageDirectory().absolutePath }
-            return try {
-                val files = File(path).listFiles()?.take(30)
-                if (files.isNullOrEmpty()) "📁 Empty directory." else "📁 $path:\n${files.joinToString("\n") { "${if (it.isDirectory) "📁" else "📄"} ${it.name} (${formatSize(it.length())})" }}"
-            } catch (e: Exception) { "❌ ${e.message}" }
-        }
-        if (lower.startsWith("search files")) {
-            val query = input.replace(Regex("(?i)search files"), "").trim().ifBlank { return "What should I search for?" }
-            return try {
-                val results = mutableListOf<String>()
-                searchFiles(File(Environment.getExternalStorageDirectory().absolutePath), query, results, 3)
-                if (results.isEmpty()) "🔍 No files found." else "🔍 Found:\n${results.joinToString("\n") { "📄 $it" }}"
-            } catch (e: Exception) { "❌ ${e.message}" }
-        }
-        if (lower.startsWith("delete file")) {
-            val path = input.replace(Regex("(?i)delete file"), "").trim().ifBlank { return "Which file?" }
-            return try { val f = File(path); if (f.exists()) { f.delete(); "✅ Deleted" } else "Not found" } catch (e: Exception) { "❌ ${e.message}" }
-        }
-        if (lower.startsWith("read file")) {
-            val path = input.replace(Regex("(?i)(read|show) file"), "").trim()
-            if (path.isBlank()) return "Usage: read file /path/file.txt"
-            return try {
-                val content = File(path).readText()
-                "📄 $path (${content.length} chars):\n\n${if (content.length > 2000) content.take(2000) + "\n\n... (truncated)" else content}"
-            } catch (e: Exception) { "❌ ${e.message}" }
-        }
-        // CREATE APP - Multi-pass generation
-        if ((lower.startsWith("create app") || lower.startsWith("build app") || lower.startsWith("make app")) && !lower.contains("repo")) {
-         val appDesc = input.replace(Regex("(?i)(create|build|make) app"), "").trim()
-          val appName = appDesc.split(" ").firstOrNull()?.replace(" ", "-")?.take(39) ?: "MyApp"
-         val description = if (appDesc.split(" ").size > 1) appDesc.substringAfter(" ").trim() else "A simple app"
-            return createAppFromDescription(token, key, appName, description)
-}
+        if (lower.startsWith("list files")) { val p = input.replace(Regex("(?i)list files"), "").trim().ifBlank { Environment.getExternalStorageDirectory().absolutePath }; return try { val f = File(p).listFiles()?.take(30); if (f.isNullOrEmpty()) "Empty" else "📁 $p:\n${f.joinToString("\n") { "${if (it.isDirectory) "📁" else "📄"} ${it.name} (${formatSize(it.length())})" }}" } catch (e: Exception) { "❌ ${e.message}" } }
+        if (lower.startsWith("search files")) { val q = input.replace(Regex("(?i)search files"), "").trim().ifBlank { return "What?" }; return try { val r = mutableListOf<String>(); searchFiles(File(Environment.getExternalStorageDirectory().absolutePath), q, r, 3); if (r.isEmpty()) "Not found" else "🔍\n${r.joinToString("\n") { "📄 $it" }}" } catch (e: Exception) { "❌ ${e.message}" } }
+        if (lower.startsWith("delete file")) { val p = input.replace(Regex("(?i)delete file"), "").trim().ifBlank { return "Which?" }; return try { val f = File(p); if (f.exists()) { f.delete(); "✅ Deleted" } else "Not found" } catch (e: Exception) { "❌ ${e.message}" } }
+        if (lower.startsWith("read file")) { val p = input.replace(Regex("(?i)(read|show) file"), "").trim(); if (p.isBlank()) return "Usage: read file /path"; return try { val c = File(p).readText(); "📄 $p (${c.length} chars):\n\n${if (c.length > 2000) c.take(2000) + "\n\n... (truncated)" else c}" } catch (e: Exception) { "❌ ${e.message}" } }
         return null
     }
-        private suspend fun createAppFromDescription(token: String, key: String, appName: String, description: String): String {
-        _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("🔍 Planning file structure for '$appName'...", false))
-        
-        // Step 1: Generate file list
-        val fileList = generateFileList(key, appName, description)
-        if (fileList.isEmpty()) return "❌ Could not generate file structure. Try a more detailed description."
-        val totalFiles = fileList.size
-        _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("📋 Planned $totalFiles files.", false))
-        
-        // Step 2: Create repo
-        val createResult = githubApi(token, "POST", "https://api.github.com/user/repos", """{"name":"$appName","private":false,"auto_init":false}""")
-        if (createResult.startsWith("❌")) return "❌ Failed to create repo: $createResult"
-        val userResult = githubApi(token, "GET", "https://api.github.com/user", null)
-        val owner = Regex("\"login\":\"([^\"]+)\"").find(userResult)?.groupValues?.get(1) ?: return "Could not get GitHub username."
-        activeOwner = owner; activeRepo = appName
-        
-        // Step 3: Generate files in batches
-        val batchSize = 40
-        val batches = fileList.chunked(batchSize)
-        val allFiles = mutableMapOf<String, String>()
-        var contextSummary = "Starting: $appName"
-        var totalPushed = 0
-        
-        for ((batchNum, batch) in batches.withIndex()) {
-            val batchLabel = "${batchNum + 1}/${batches.size}"
-            _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("📝 Batch $batchLabel: Generating ${batch.size} files...", false))
-            
-            val generated = generateBatchFiles(key, appName, description, batch, allFiles, batchNum + 1, batches.size, contextSummary)
-            allFiles.putAll(generated)
-            
-            // Push this batch to GitHub
-            generated.forEach { (path, content) ->
-                val encoded = android.util.Base64.encodeToString(content.toByteArray(), android.util.Base64.NO_WRAP)
-                val pushResult = githubApi(token, "PUT", "https://api.github.com/repos/$owner/$appName/contents/$path", """{"message":"Add $path (batch $batchLabel)","content":"$encoded"}""")
-                if (!pushResult.startsWith("❌")) totalPushed++
-            }
-            
-            contextSummary = buildContextSummary(allFiles, batchNum + 1, batches.size)
-            _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("✅ Batch $batchLabel: ${generated.size} generated, $totalPushed total pushed.", false))
-        }
-        
-        // Step 4: Add CI workflow if it's an Android project
-        if (description.contains("Android") || description.contains("Kotlin") || description.contains("Compose") || fileList.any { it.contains("build.gradle") }) {
-            val workflowYml = """
-name: Build $appName
-on: [push, workflow_dispatch]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with: {java-version: '17', distribution: 'temurin'}
-      - run: chmod +x gradlew
-      - run: ./gradlew assembleDebug
-      - uses: actions/upload-artifact@v4
-        with: {name: ${appName}-debug, path: app/build/outputs/apk/debug/app-debug.apk}
-            """.trimIndent()
-            val encodedWf = android.util.Base64.encodeToString(workflowYml.toByteArray(), android.util.Base64.NO_WRAP)
-            githubApi(token, "PUT", "https://api.github.com/repos/$owner/$appName/contents/.github/workflows/build.yml", """{"message":"Add CI workflow","content":"$encodedWf"}""")
-        }
-        
-        return "✅ APP CREATED: $appName\n📁 github.com/$owner/$appName\n📄 $totalPushed/$totalFiles files pushed\n🧠 ${batches.size} passes used\n\nCommands:\n• browse repo $owner/$appName\n• fix file path: instruction\n• add file path: description"
-        }
 
     // ===== GITHUB COMMANDS =====
     private suspend fun executeGitHubCommand(input: String): String? {
-        val token = preferences.getGitHubToken() ?: return null
+        val token = preferences.getGitHubToken().ifBlank { return null }
         val lower = input.lowercase()
+        val key = preferences.getApiKey().ifBlank { return "No Gemini API key set." }
 
-        if (lower.contains("create") && lower.contains("repo") && !lower.contains("app")) {
+        // CREATE APP - Multi-pass generation
+        if ((lower.startsWith("create app") || lower.startsWith("build app") || lower.startsWith("make app")) && !lower.contains("repo")) {
+            val appDesc = input.replace(Regex("(?i)(create|build|make) app"), "").trim()
+            val appName = appDesc.split(" ").firstOrNull()?.replace(" ", "-")?.take(39) ?: "MyApp"
+            val description = if (appDesc.split(" ").size > 1) appDesc.substringAfter(" ").trim() else "A simple app"
+            return createAppFromDescription(token, key, appName, description)
+        }
+
+        // CREATE REPO
+        if (lower.contains("create") && lower.contains("repo")) {
             val name = input.replace(Regex("(?i)(create|a|repo|gitHub)"), "").trim().replace(" ", "-").take(39)
-            if (name.isBlank()) return "What should I name the repo?"
+            if (name.isBlank()) return "Repo name?"
             return githubApi(token, "POST", "https://api.github.com/user/repos", """{"name":"$name","private":false,"auto_init":true}""")
         }
+
+        // LIST REPOS
         if (lower.contains("list") && lower.contains("repo")) {
             return githubApi(token, "GET", "https://api.github.com/user/repos?per_page=5&sort=updated", null)
         }
+
+        // COMPILE REPO
         if (lower.startsWith("compile ") || lower.startsWith("build ")) {
             val repo = lower.removePrefix("compile ").removePrefix("build ").trim()
             val parts = repo.split("/"); if (parts.size != 2) return "Format: owner/repo"
             return triggerWorkflow(token, parts[0], parts[1])
         }
-        if (lower.startsWith("browse repo ") || lower.startsWith("read repo ")) {
+
+        // BROWSE REPO
+        if (lower.startsWith("browse repo ") || lower.startsWith("read repo ") && !lower.contains("file")) {
             val repo = lower.removePrefix("browse repo ").removePrefix("read repo ").trim()
             val parts = repo.split("/"); if (parts.size != 2) return "Format: owner/repo"
             return browseRepository(token, parts[0], parts[1])
         }
+
+        // READ REPO FILE
         if (lower.startsWith("read repo file ")) {
             val parts = input.replace(Regex("(?i)read repo file "), "").trim().split(" ")
             if (parts.size < 2) return "Format: read repo file owner/repo path/to/file.kt"
             val repoParts = parts[0].split("/"); if (repoParts.size != 2) return "Format: read repo file owner/repo path/to/file.kt"
             return readRepoFile(token, repoParts[0], repoParts[1], parts.drop(1).joinToString(" "))
         }
+
+        // FIX FILE
+        if (lower.startsWith("fix ") || lower.startsWith("fix file ") || lower.startsWith("edit ")) {
+            val filePath = input.replace(Regex("(?i)(fix|fix file|edit|update) "), "").substringBefore(":").trim()
+            val instruction = input.substringAfter(":").trim().ifBlank { return "Usage: fix file path: instruction" }
+            if (activeRepo.isBlank()) return "No active repo. Use 'set repo owner/repo' first."
+            return fixFile(token, key, activeOwner, activeRepo, filePath, instruction)
+        }
+
+        // ADD FILE
+        if (lower.startsWith("add file ") || lower.startsWith("create file ")) {
+            val filePath = input.replace(Regex("(?i)(add|create) file "), "").substringBefore(":").trim()
+            val desc = input.substringAfter(":").trim().ifBlank { return "Usage: add file path: description" }
+            if (activeRepo.isBlank()) return "No active repo."
+            return addFile(token, key, activeOwner, activeRepo, filePath, desc)
+        }
+
+        // SET ACTIVE REPO
+        if (lower.startsWith("set repo ") || lower.startsWith("switch to ")) {
+            val repo = input.replace(Regex("(?i)(set repo|switch to) "), "").trim()
+            val parts = repo.split("/"); if (parts.size != 2) return "Format: owner/repo"
+            activeOwner = parts[0]; activeRepo = parts[1]
+            return "✅ Active repo: $activeOwner/$activeRepo"
+        }
+
         return null
     }
 
-    // ===== UTILITY =====
+    // ===== UTILITY COMMANDS =====
     private fun executeUtilityCommand(input: String): String? {
         val lower = input.lowercase().trim()
-        if (lower == "device info") {
-            val r = getRamInfo(); val st = getStorageInfo(); val b = getBatteryInfo()
-            return "📱 ${Build.MODEL} · Android ${Build.VERSION.RELEASE}\nRAM: $r | Storage: $st | Battery: $b | CPU: ${Runtime.getRuntime().availableProcessors()} cores"
-        }
+        if (lower == "device info") { val r = getRamInfo(); val st = getStorageInfo(); val b = getBatteryInfo(); return "📱 ${Build.MODEL} · Android ${Build.VERSION.RELEASE}\nRAM: $r | Storage: $st | Battery: $b | CPU: ${Runtime.getRuntime().availableProcessors()} cores" }
         if (lower == "time") return "🕐 ${SimpleDateFormat("HH:mm:ss · EEEE, MMMM d", Locale.getDefault()).format(Date())}"
         return null
     }
 
-    // ===== GEMINI =====
+    // ===== GEMINI FALLBACK =====
     private suspend fun askGemini(input: String): String {
-        val key = preferences.getApiKey() ?: return "No API key set. Add it in Protocol settings."
-        return try {
-            GenerativeModel("gemini-2.5-flash", key, generationConfig { temperature = 0.7f; maxOutputTokens = 2048 })
-                .generateContent(content { text(input) }).text ?: "No response."
-        } catch (e: Exception) { if (e.message?.contains("503") == true) "Busy." else "Error: ${e.message}" }
+        val key = preferences.getApiKey().ifBlank { return "No API key set. Add it in Protocol settings." }
+        return try { GenerativeModel("gemini-2.5-flash", key, generationConfig { temperature = 0.7f; maxOutputTokens = 2048 }).generateContent(content { text(input) }).text ?: "No response." } catch (e: Exception) { if (e.message?.contains("503") == true) "Busy." else "Error: ${e.message}" }
     }
 
-    // ===== GITHUB API =====
+    // ============================================
+    // MULTI-PASS APP GENERATION
+    // ============================================
+
+    private suspend fun createAppFromDescription(token: String, key: String, appName: String, description: String): String {
+        _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("🔍 Planning file structure for '$appName'...", false))
+        
+        val fileList = generateFileList(key, appName, description)
+        if (fileList.isEmpty()) return "❌ Could not generate file structure. Try a more detailed description."
+        _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("📋 Planned ${fileList.size} files.", false))
+        
+        val createResult = githubApi(token, "POST", "https://api.github.com/user/repos", """{"name":"$appName","private":false,"auto_init":false}""")
+        if (createResult.startsWith("❌")) return "❌ Failed to create repo: $createResult"
+        val userResult = githubApi(token, "GET", "https://api.github.com/user", null)
+        val owner = Regex("\"login\":\"([^\"]+)\"").find(userResult)?.groupValues?.get(1) ?: return "Could not get GitHub username."
+        activeOwner = owner; activeRepo = appName
+
+        val batchSize = 40; val batches = fileList.chunked(batchSize)
+        val allFiles = mutableMapOf<String, String>()
+        var contextSummary = "Starting: $appName"; var totalPushed = 0
+
+        for ((batchNum, batch) in batches.withIndex()) {
+            val label = "${batchNum + 1}/${batches.size}"
+            _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("📝 Batch $label: ${batch.size} files...", false))
+            val generated = generateBatchFiles(key, appName, description, batch, allFiles, batchNum + 1, batches.size, contextSummary)
+            allFiles.putAll(generated)
+            generated.forEach { (path, content) ->
+                val encoded = android.util.Base64.encodeToString(content.toByteArray(), android.util.Base64.NO_WRAP)
+                if (!githubApi(token, "PUT", "https://api.github.com/repos/$owner/$appName/contents/$path", """{"message":"Add $path","content":"$encoded"}""").startsWith("❌")) totalPushed++
+            }
+            contextSummary = buildContextSummary(allFiles, batchNum + 1, batches.size)
+            _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("✅ Batch $label: ${generated.size} generated, $totalPushed pushed.", false))
+        }
+
+        if (description.contains("Android") || description.contains("Kotlin") || description.contains("Compose") || fileList.any { it.contains("build.gradle") }) {
+            val wf = """name: Build $appName\non: [push, workflow_dispatch]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-java@v4\n        with: {java-version: '17', distribution: 'temurin'}\n      - run: chmod +x gradlew\n      - run: ./gradlew assembleDebug\n      - uses: actions/upload-artifact@v4\n        with: {name: ${appName}-debug, path: app/build/outputs/apk/debug/app-debug.apk}"""
+            val ewf = android.util.Base64.encodeToString(wf.toByteArray(), android.util.Base64.NO_WRAP)
+            githubApi(token, "PUT", "https://api.github.com/repos/$owner/$appName/contents/.github/workflows/build.yml", """{"message":"Add CI","content":"$ewf"}""")
+        }
+
+        return "✅ APP CREATED: $appName\n📁 github.com/$owner/$appName\n📄 $totalPushed/${fileList.size} files\n🧠 ${batches.size} passes\n\n🔧 Commands:\n• browse repo $owner/$appName\n• fix file path: instruction\n• add file path: description"
+    }
+
+    private suspend fun generateFileList(key: String, appName: String, description: String): List<String> {
+        val model = GenerativeModel("gemini-2.5-flash", key, generationConfig { temperature = 0.2f; maxOutputTokens = 4096 })
+        val prompt = """
+            Generate a COMPLETE file list for: "$appName". Description: $description
+            ${if (description.contains("Android") || description.contains("Kotlin") || description.contains("Compose")) "Use AGP 8.2.0, Kotlin 1.9.22, Compose BOM 2023.10.01, Min SDK 26. Include build files, manifest, Kotlin sources, resources, CI." else "Generate appropriate files for this project type."}
+            Return ONLY a JSON array: ["path/file1","path/file2",...]
+            Generate ${if (description.length > 200) "40-80" else "15-30"} files.
+        """.trimIndent()
+        return try {
+            val resp = model.generateContent(content { text(prompt) }).text ?: return emptyList()
+            val arr = org.json.JSONArray(resp.substringAfter("[").substringBeforeLast("]").let { "[$it]" })
+            (0 until arr.length()).map { arr.getString(it) }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    private suspend fun generateBatchFiles(key: String, appName: String, description: String, batch: List<String>, existingFiles: Map<String, String>, batchNum: Int, totalBatches: Int, contextSummary: String): Map<String, String> {
+        val model = GenerativeModel("gemini-2.5-flash", key, generationConfig { temperature = 0.2f; maxOutputTokens = 60000 })
+        val existing = if (existingFiles.isNotEmpty()) "ALREADY GENERATED:\n${existingFiles.keys.take(15).joinToString("\n") { "  ✅ $it" }}" else "No files yet."
+        val prompt = """
+            Generate batch $batchNum/$totalBatches for: "$appName". Description: $description
+            Context: $contextSummary. $existing
+            TO GENERATE (${batch.size}): ${batch.joinToString("\n") { "  ⏳ $it" }}
+            Return ONLY JSON: {"files":[{"path":"...","content":"..."}]}. Complete code, no placeholders.
+        """.trimIndent()
+        return try {
+            val resp = model.generateContent(content { text(prompt) }).text ?: return emptyMap()
+            val obj = org.json.JSONObject(resp.substringAfter("{").substringBeforeLast("}").let { "{$it}" })
+            val arr = obj.getJSONArray("files"); val result = mutableMapOf<String, String>()
+            for (i in 0 until arr.length()) { val f = arr.getJSONObject(i); result[f.getString("path")] = f.getString("content").replace("\\n", "\n").replace("\\t", "\t").replace("\\\"", "\"").replace("\\\\", "\\") }
+            result
+        } catch (e: Exception) { emptyMap() }
+    }
+
+    private fun buildContextSummary(files: Map<String, String>, passNum: Int, totalPasses: Int): String {
+        val kf = files.keys.filter { it.contains("Main") || it.contains("App") || it.contains("build.gradle") || it.contains("AndroidManifest") || it.contains("main") || it.contains("index") || it.contains("package.json") }.take(5)
+        return "Pass $passNum/$totalPasses done. ${files.size} files. Key: ${kf.joinToString(", ")}."
+    }
+
+    // ===== GITHUB API HELPERS =====
     private suspend fun githubApi(token: String, method: String, url: String, body: String?): String = withContext(Dispatchers.IO) {
         try {
-            val req = Request.Builder().url(url).header("Authorization", "Bearer $token").header("Accept", "application/vnd.github.v3+json")
-                .apply { if (method == "PUT" || method == "POST") put(body!!.toRequestBody("application/json".toMediaType())) else get() }.build()
+            val req = Request.Builder().url(url).header("Authorization", "Bearer $token").header("Accept", "application/vnd.github.v3+json").apply { if (method == "PUT" || method == "POST") put(body!!.toRequestBody("application/json".toMediaType())) else get() }.build()
             val resp = client.newCall(req).execute()
             if (resp.isSuccessful) resp.body?.string() ?: "OK" else "❌ ${resp.message}"
         } catch (e: Exception) { "❌ ${e.message}" }
@@ -309,34 +315,28 @@ jobs:
 
     private suspend fun triggerWorkflow(token: String, owner: String, repo: String): String = withContext(Dispatchers.IO) {
         try {
-            val listResp = client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/actions/workflows").header("Authorization", "Bearer $token").build()).execute()
-            val body = listResp.body?.string() ?: return@withContext "⚠️ No workflows."
-            val wid = Regex("\"id\":(\\d+)").find(body)?.groupValues?.get(1) ?: return@withContext "⚠️ No ID."
-            val dResp = client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/actions/workflows/$wid/dispatches").header("Authorization", "Bearer $token").post("""{"ref":"main"}""".toRequestBody("application/json".toMediaType())).build()).execute()
-            if (dResp.isSuccessful) "🚀 Build triggered" else "⚠️ ${dResp.message}"
+            val lr = client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/actions/workflows").header("Authorization", "Bearer $token").build()).execute()
+            val wid = Regex("\"id\":(\\d+)").find(lr.body?.string() ?: "")?.groupValues?.get(1) ?: return@withContext "⚠️ No workflows."
+            val dr = client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/actions/workflows/$wid/dispatches").header("Authorization", "Bearer $token").post("""{"ref":"main"}""".toRequestBody("application/json".toMediaType())).build()).execute()
+            if (dr.isSuccessful) "🚀 Build triggered" else "⚠️ ${dr.message}"
         } catch (e: Exception) { "⚠️ ${e.message}" }
     }
 
     private suspend fun browseRepository(token: String, owner: String, repo: String): String = withContext(Dispatchers.IO) {
         try {
-            val repoResp = client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo").header("Authorization", "Bearer $token").header("Accept", "application/vnd.github.v3+json").build()).execute()
-            if (!repoResp.isSuccessful) return@withContext "❌ Repo not found."
-            val repoJson = org.json.JSONObject(repoResp.body?.string() ?: "{}")
-            val desc = repoJson.optString("description", "No description"); val stars = repoJson.optInt("stargazers_count", 0)
-            val lang = repoJson.optString("language", "Unknown"); val branch = repoJson.optString("default_branch", "main")
-
-            val treeResp = client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/git/trees/$branch?recursive=1").header("Authorization", "Bearer $token").header("Accept", "application/vnd.github.v3+json").build()).execute()
-            val treeJson = org.json.JSONObject(treeResp.body?.string() ?: "{}"); val tree = treeJson.optJSONArray("tree")
-            val files = mutableListOf<String>(); val dirs = mutableSetOf<String>()
-            if (tree != null) for (i in 0 until minOf(tree.length(), 100)) {
-                val item = tree.getJSONObject(i)
-                if (item.getString("type") == "tree") dirs.add(item.getString("path")) else files.add(item.getString("path"))
-            }
+            val rr = client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo").header("Authorization", "Bearer $token").header("Accept", "application/vnd.github.v3+json").build()).execute()
+            if (!rr.isSuccessful) return@withContext "❌ Not found."
+            val rj = org.json.JSONObject(rr.body?.string() ?: "{}")
+            val desc = rj.optString("description", "No desc"); val stars = rj.optInt("stargazers_count", 0); val lang = rj.optString("language", "?"); val branch = rj.optString("default_branch", "main")
+            val tr = client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/git/trees/$branch?recursive=1").header("Authorization", "Bearer $token").header("Accept", "application/vnd.github.v3+json").build()).execute()
+            val tj = org.json.JSONObject(tr.body?.string() ?: "{}"); val tree = tj.optJSONArray("tree")
+            val dirs = mutableSetOf<String>(); val files = mutableListOf<String>()
+            if (tree != null) for (i in 0 until minOf(tree.length(), 100)) { val item = tree.getJSONObject(i); if (item.getString("type") == "tree") dirs.add(item.getString("path")) else files.add(item.getString("path")) }
             buildString {
                 append("📁 $owner/$repo\n📝 $desc\n⭐ $stars | 💻 $lang | 🌿 $branch\n\n📂 Dirs (${dirs.size}):\n${dirs.take(15).joinToString("\n") { "  📁 $it" }}")
-                if (dirs.size > 15) append("\n  ... and ${dirs.size - 15} more")
+                if (dirs.size > 15) append("\n  ... +${dirs.size - 15} more")
                 append("\n\n📄 Files (${files.size}):\n${files.take(20).joinToString("\n") { "  📄 $it" }}")
-                if (files.size > 20) append("\n  ... and ${files.size - 20} more")
+                if (files.size > 20) append("\n  ... +${files.size - 20} more")
             }
         } catch (e: Exception) { "❌ ${e.message}" }
     }
@@ -344,142 +344,61 @@ jobs:
     private suspend fun readRepoFile(token: String, owner: String, repo: String, path: String): String = withContext(Dispatchers.IO) {
         try {
             val resp = client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/contents/$path").header("Authorization", "Bearer $token").header("Accept", "application/vnd.github.v3+json").build()).execute()
-            if (!resp.isSuccessful) return@withContext "❌ File not found."
+            if (!resp.isSuccessful) return@withContext "❌ Not found."
             val json = org.json.JSONObject(resp.body?.string() ?: "{}"); val content = json.optString("content", "")
-            if (content.isBlank()) return@withContext "Empty file"
+            if (content.isBlank()) return@withContext "Empty"
             val decoded = String(android.util.Base64.decode(content, android.util.Base64.DEFAULT))
-            val size = json.optInt("size", 0)
-            if (decoded.length > 3000) "📄 $owner/$repo/$path (${formatSize(size.toLong())})\n\n${decoded.take(3000)}\n\n... (${decoded.length} total chars)"
-            else "📄 $owner/$repo/$path (${formatSize(size.toLong())})\n\n$decoded"
+            if (decoded.length > 3000) "📄 $owner/$repo/$path\n\n${decoded.take(3000)}\n\n... (${decoded.length} total)" else "📄 $owner/$repo/$path\n\n$decoded"
         } catch (e: Exception) { "❌ ${e.message}" }
     }
 
-    // ============================================
-// MULTI-PASS APP GENERATION
-// ============================================
+    private suspend fun fixFile(token: String, key: String, owner: String, repo: String, path: String, instruction: String): String = withContext(Dispatchers.IO) {
+        try {
+            val rr = client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/contents/$path").header("Authorization", "Bearer $token").header("Accept", "application/vnd.github.v3+json").build()).execute()
+            if (!rr.isSuccessful) return@withContext "❌ File not found."
+            val json = org.json.JSONObject(rr.body?.string() ?: "{}")
+            val current = String(android.util.Base64.decode(json.getString("content"), android.util.Base64.DEFAULT)); val sha = json.getString("sha")
+            val model = GenerativeModel("gemini-2.5-flash", key, generationConfig { temperature = 0.1f; maxOutputTokens = 8192 })
+            val newContent = model.generateContent(content { text("Current:\n```\n$current\n```\nInstruction: $instruction\nReturn ONLY complete file.") }).text ?: return@withContext "Gemini empty."
+            val encoded = android.util.Base64.encodeToString(newContent.toByteArray(), android.util.Base64.NO_WRAP)
+            val pr = client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/contents/$path").header("Authorization", "Bearer $token").header("Accept", "application/vnd.github.v3+json").put("""{"message":"Fix: $instruction","content":"$encoded","sha":"$sha"}""".toRequestBody("application/json".toMediaType())).build()).execute()
+            if (pr.isSuccessful) "✅ Fixed $path" else "❌ ${pr.message}"
+        } catch (e: Exception) { "❌ ${e.message}" }
+    }
 
-private suspend fun generateFileList(key: String, appName: String, description: String): List<String> {
-    val model = GenerativeModel("gemini-2.5-flash", key, generationConfig { temperature = 0.2f; maxOutputTokens = 4096 })
-    val prompt = """
-        Generate a COMPLETE file list for an app: "$appName"
-        Description: $description
-        Include every file needed for a compilable app. Be thorough.
-        ${if (description.contains("Android") || description.contains("Kotlin") || description.contains("Compose") || description.contains("Jetpack"))
-            "Use: AGP 8.2.0, Kotlin 1.9.22, Compose BOM 2023.10.01, Min SDK 26, Material 3. Include build files, manifest, all Kotlin sources, resources, theme, CI workflow."
-          else if (description.contains("Python") || description.contains("Flask") || description.contains("FastAPI") || description.contains("Django"))
-            "Use Python with requirements.txt, Dockerfile, main application file, tests, README."
-          else if (description.contains("React") || description.contains("JavaScript") || description.contains("TypeScript"))
-            "Use React/Vite with package.json, components, styles, public folder, CI config."
-          else
-            "Generate the appropriate files for this type of project."}
-        Return ONLY a JSON array: ["path/file1","path/file2",...]
-        Generate ${if (description.length > 200) "40-80" else "15-30"} files based on complexity.
-    """.trimIndent()
-    return try {
-        val resp = model.generateContent(content { text(prompt) }).text ?: return emptyList()
-        val jsonStr = resp.substringAfter("[").substringBeforeLast("]").let { "[$it]" }
-        (0 until org.json.JSONArray(jsonStr).length()).map { org.json.JSONArray(jsonStr).getString(it) }
-    } catch (e: Exception) { emptyList() }
-}
-
-private suspend fun generateBatchFiles(
-    key: String, appName: String, description: String,
-    batch: List<String>, existingFiles: Map<String, String>,
-    batchNum: Int, totalBatches: Int, contextSummary: String
-): Map<String, String> {
-    val model = GenerativeModel("gemini-2.5-flash", key, generationConfig { temperature = 0.2f; maxOutputTokens = 60000 })
-    val existingPaths = if (existingFiles.isNotEmpty()) {
-        "ALREADY GENERATED (${existingFiles.size} files):\n${existingFiles.keys.take(15).joinToString("\n") { "  ✅ $it" }}"
-    } else "No files generated yet."
-    
-    val prompt = """
-        Generate COMPLETE content for batch $batchNum/$totalBatches of app: "$appName"
-        Description: $description
-        Context from previous batches: $contextSummary
-        
-        $existingPaths
-        
-        FILES TO GENERATE NOW (${batch.size} files):
-        ${batch.joinToString("\n") { "  ⏳ $it" }}
-        
-        IMPORTANT: These files must be consistent with already-generated code.
-        Use the same class names, package names, and patterns.
-        Return ONLY valid JSON: {"files":[{"path":"path/to/file","content":"complete file content here"}]}
-        Each content must be COMPLETE compilable code, NOT placeholders.
-        Use \\n for newlines and \\\" for quotes inside JSON strings.
-    """.trimIndent()
-    
-    return try {
-        val resp = model.generateContent(content { text(prompt) }).text ?: return emptyMap()
-        val jsonStr = resp.substringAfter("{").substringBeforeLast("}").let { "{$it}" }
-        val obj = org.json.JSONObject(jsonStr)
-        val filesArr = obj.getJSONArray("files")
-        val result = mutableMapOf<String, String>()
-        for (i in 0 until filesArr.length()) {
-            val f = filesArr.getJSONObject(i)
-            val path = f.getString("path")
-            val content = f.getString("content")
-                .replace("\\n", "\n").replace("\\t", "\t")
-                .replace("\\\"", "\"").replace("\\\\", "\\")
-            result[path] = content
-        }
-        result
-    } catch (e: Exception) { emptyMap() }
-}
-
-private fun buildContextSummary(files: Map<String, String>, passNum: Int, totalPasses: Int): String {
-    val keyFiles = files.keys.filter {
-        it.contains("Main") || it.contains("App") || it.contains("build.gradle") ||
-        it.contains("AndroidManifest") || it.contains("main") || it.contains("index") ||
-        it.contains("package.json") || it.contains("requirements.txt")
-    }.take(5)
-    return "Pass $passNum/$totalPasses done. ${files.size} files generated. Key files: ${keyFiles.joinToString(", ")}."
-}
+    private suspend fun addFile(token: String, key: String, owner: String, repo: String, path: String, desc: String): String = withContext(Dispatchers.IO) {
+        try {
+            val model = GenerativeModel("gemini-2.5-flash", key, generationConfig { temperature = 0.2f; maxOutputTokens = 4096 })
+            val content = model.generateContent(content { text("Generate complete file. Path: $path. Description: $desc. Return ONLY file content.") }).text ?: return@withContext "Gemini empty."
+            val encoded = android.util.Base64.encodeToString(content.toByteArray(), android.util.Base64.NO_WRAP)
+            val pr = client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/contents/$path").header("Authorization", "Bearer $token").header("Accept", "application/vnd.github.v3+json").put("""{"message":"Add $path","content":"$encoded"}""".toRequestBody("application/json".toMediaType())).build()).execute()
+            if (pr.isSuccessful) "✅ Added $path" else "❌ ${pr.message}"
+        } catch (e: Exception) { "❌ ${e.message}" }
+    }
 
     // ===== ACCESSIBILITY HELPERS =====
-    private fun tapOnText(service: AuraAccessibilityService?, text: String): Boolean {
-        if (service == null) return false
+    private fun tapOnText(service: AuraAccessibilityService, text: String): Boolean {
         val root = service.rootInActiveWindow ?: return false
         val node = findNodeByText(root, text)
-        return if (node != null) {
-            val rect = android.graphics.Rect(); node.getBoundsInScreen(rect)
-            root.recycle(); node.recycle()
-            val path = android.graphics.Path().apply { moveTo(rect.centerX().toFloat(), rect.centerY().toFloat()) }
-            val gesture = android.accessibilityservice.GestureDescription.Builder().addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 100)).build()
-            service.dispatchGesture(gesture, null, null)
-        } else { root.recycle(); false }
+        return if (node != null) { val r = android.graphics.Rect(); node.getBoundsInScreen(r); root.recycle(); node.recycle(); val p = android.graphics.Path().apply { moveTo(r.centerX().toFloat(), r.centerY().toFloat()) }; service.dispatchGesture(android.accessibilityservice.GestureDescription.Builder().addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(p, 0, 100)).build(), null, null) } else { root.recycle(); false }
     }
 
-    private fun typeText(service: AuraAccessibilityService?, text: String): Boolean {
-        if (service == null) return false
+    private fun typeText(service: AuraAccessibilityService, text: String): Boolean {
         val focused = service.findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
         val args = android.os.Bundle().apply { putCharSequence(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text) }
-        val result = focused.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-        focused.recycle(); return result
+        val r = focused.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT, args); focused.recycle(); return r
     }
 
-    private fun scrollScreen(service: AuraAccessibilityService?, up: Boolean) {
-        if (service == null) return
-        val display = service.resources.displayMetrics
-        val path = if (up) {
-            android.graphics.Path().apply { moveTo(display.widthPixels / 2f, display.heightPixels * 0.3f); lineTo(display.widthPixels / 2f, display.heightPixels * 0.8f) }
-        } else {
-            android.graphics.Path().apply { moveTo(display.widthPixels / 2f, display.heightPixels * 0.8f); lineTo(display.widthPixels / 2f, display.heightPixels * 0.3f) }
-        }
-        val gesture = android.accessibilityservice.GestureDescription.Builder().addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 300)).build()
-        service.dispatchGesture(gesture, null, null)
+    private fun scrollScreen(service: AuraAccessibilityService, up: Boolean) {
+        val d = service.resources.displayMetrics
+        val p = if (up) android.graphics.Path().apply { moveTo(d.widthPixels / 2f, d.heightPixels * 0.3f); lineTo(d.widthPixels / 2f, d.heightPixels * 0.8f) } else android.graphics.Path().apply { moveTo(d.widthPixels / 2f, d.heightPixels * 0.8f); lineTo(d.widthPixels / 2f, d.heightPixels * 0.3f) }
+        service.dispatchGesture(android.accessibilityservice.GestureDescription.Builder().addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(p, 0, 300)).build(), null, null)
     }
 
-    private fun swipeScreen(service: AuraAccessibilityService?, right: Boolean) {
-        if (service == null) return
-        val display = service.resources.displayMetrics
-        val path = if (right) {
-            android.graphics.Path().apply { moveTo(display.widthPixels * 0.2f, display.heightPixels / 2f); lineTo(display.widthPixels * 0.8f, display.heightPixels / 2f) }
-        } else {
-            android.graphics.Path().apply { moveTo(display.widthPixels * 0.8f, display.heightPixels / 2f); lineTo(display.widthPixels * 0.2f, display.heightPixels / 2f) }
-        }
-        val gesture = android.accessibilityservice.GestureDescription.Builder().addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 300)).build()
-        service.dispatchGesture(gesture, null, null)
+    private fun swipeScreen(service: AuraAccessibilityService, right: Boolean) {
+        val d = service.resources.displayMetrics
+        val p = if (right) android.graphics.Path().apply { moveTo(d.widthPixels * 0.2f, d.heightPixels / 2f); lineTo(d.widthPixels * 0.8f, d.heightPixels / 2f) } else android.graphics.Path().apply { moveTo(d.widthPixels * 0.8f, d.heightPixels / 2f); lineTo(d.widthPixels * 0.2f, d.heightPixels / 2f) }
+        service.dispatchGesture(android.accessibilityservice.GestureDescription.Builder().addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(p, 0, 300)).build(), null, null)
     }
 
     private fun findNodeByText(node: android.view.accessibility.AccessibilityNodeInfo, text: String): android.view.accessibility.AccessibilityNodeInfo? {
