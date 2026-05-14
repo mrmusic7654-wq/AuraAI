@@ -32,7 +32,7 @@ class AuraPreferences @Inject constructor(
     // ============================================
     companion object {
         const val DEFAULT_GEMINI_API_KEY = "AIzaSyA5aPzEkP9xJ-NjsHFun33ZhlSjRp6HD9Y"
-        const val DEFAULT_GITHUB_TOKEN = "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"
+        const val DEFAULT_GITHUB_TOKEN = "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"
         const val DEFAULT_TELEGRAM_TOKEN = "8962193188:AAEmhBBttbsbF9nFSMG5Kv1SqCpHJh8MNaQ"
     }
 
