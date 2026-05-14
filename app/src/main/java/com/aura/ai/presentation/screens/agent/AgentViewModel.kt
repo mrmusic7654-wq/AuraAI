@@ -138,7 +138,8 @@ class AgentViewModel @Inject constructor(
     private suspend fun executeGitHubCommand(input: String): String? {
         val token = preferences.getGitHubToken()?.ifBlank { return null } ?: return null
         val lower = input.lowercase()
-        val key = preferences.getApiKey().ifBlank { return "No Gemini API key set." }
+        val apiKey = preferences.getApiKey() ?: return "No Gemini API key set."
+    val key = apiKey.ifBlank { return "No Gemini API key set." }
 
         // CREATE APP - Multi-pass generation
         if ((lower.startsWith("create app") || lower.startsWith("build app") || lower.startsWith("make app")) && !lower.contains("repo")) {
