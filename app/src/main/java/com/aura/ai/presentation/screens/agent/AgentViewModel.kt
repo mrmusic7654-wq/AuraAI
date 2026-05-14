@@ -761,10 +761,12 @@ jobs:
                 val request = Request.Builder().url(url)
                     .header("Authorization", "Bearer $token")
                     .header("Accept", "application/vnd.github.v3+json")
+                    .header("Content-Type", "application/json")
                     .apply {
                         when (method) {
-                            "PUT", "POST" -> put(body!!.toRequestBody("application/json".toMediaType()))
-                        }
+                          "POST" -> post((body ?: "{}").toRequestBody("application/json".toMediaType()))
+                          "PUT" -> put((body ?: "{}").toRequestBody("application/json".toMediaType()))
+                 }
                     }.build()
                 val response = client.newCall(request).execute()
                 if (response.isSuccessful) {
