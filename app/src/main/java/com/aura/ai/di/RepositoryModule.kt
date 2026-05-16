@@ -1,3 +1,9 @@
-package com.aura.ai.di.RepositoryModule
+package com.aura.ai.di
 
-// TODO: Implement
+import dagger.Module
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+
+@Module
+@InstallIn(SingletonComponent::class)
+object RepositoryModule

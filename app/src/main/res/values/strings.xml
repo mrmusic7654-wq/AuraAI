@@ -1,9 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- App -->
     <string name="app_name">Aura AI</string>
-    <string name="accessibility_service_description">Aura AI uses accessibility to read screen content and perform actions on your behalf</string>
-    <string name="nav_home">Home</string>
-    <string name="nav_agent">Agent</string>
+    
+    <!-- Accessibility Service -->
+    <string name="accessibility_service_description">Aura AI uses accessibility to read screen content and perform actions on your behalf including tapping, swiping, typing, opening apps, taking screenshots, and multi-step automation.</string>
+    
+    <!-- Navigation -->
+    <string name="nav_nexus">Nexus</string>
+    <string name="nav_neural">Neural</string>
+    <string name="nav_tasks">Tasks</string>
+    <string name="nav_scheduler">Schedule</string>
+    <string name="nav_swarm">Swarm</string>
+    <string name="nav_protocol">Protocol</string>
+    <string name="nav_vault">Vault</string>
+    <string name="nav_netsurfer">NetSurfer</string>
+    <string name="nav_market">Market</string>
+    <string name="nav_matrix">Matrix</string>
+    <string name="nav_github">GitHub</string>
     <string name="nav_automation">Automation</string>
     <string name="nav_history">History</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_agent">Agent</string>
     <string name="nav_settings">Settings</string>
+    
+    <!-- Protocol Screen -->
+    <string name="settings_title">Security Protocol</string>
+    <string name="settings_subtitle">Configure Aura\'s neural link</string>
+    <string name="api_key_label">Gemini API Key</string>
+    <string name="api_key_description">Enter your neural access key from Google AI Studio</string>
+    <string name="api_key_placeholder">Paste your Gemini API key here…</string>
+    <string name="github_token_label">GitHub Token</string>
+    <string name="github_token_description">Create a token at github.com/settings/tokens with repo and workflow scopes</string>
+    <string name="github_token_placeholder">Paste your GitHub personal access token…</string>
+    <string name="telegram_token_label">Telegram Bot Token</string>
+    <string name="telegram_token_description">Create a bot via @BotFather on Telegram and paste the token here</string>
+    <string name="telegram_token_placeholder">Paste your Telegram bot token…</string>
+    <string name="save">Save</string>
+    <string name="restart">Restart</string>
+    <string name="restart_app">Restart App Now</string>
+    <string name="get_api_key">Get a free API key →</string>
+    <string name="get_github_token">Create GitHub token →</string>
+    <string name="get_telegram_token">Create bot via @BotFather →</string>
+    <string name="theme_label">Interface Theme</string>
+    <string name="agents_label">Connected Agents</string>
+    <string name="permissions_label">Permissions</string>
+    <string name="system_label">System</string>
+    <string name="saved">✓ Saved</string>
+    <string name="saved_restart">✓ Saved! Restart to apply.</string>
+    <string name="key_saved">✓ Key Saved</string>
+    <string name="token_saved">✓ Token Saved</string>
+    <string name="all_permissions_granted">All permissions granted</string>
+    <string name="permission_required">Required</string>
+    <string name="permission_granted">Granted</string>
+    <string name="permission_optional">Optional</string>
+    
+    <!-- Agent Screen -->
+    <string name="agent_hint">Tell Aura what to do...</string>
+    <string name="agent_send">Send</string>
+    <string name="agent_stop">Stop</string>
+    <string name="agent_pause">Pause</string>
+    <string name="agent_resume">Resume</string>
+    <string name="interlink_directive">Interlink directive...</string>
+    <string name="synthesizing">Synthesizing...</string>
+    <string name="neural_presence">Neural Presence Detected</string>
+    <string name="aura_neural">AURA NEURAL</string>
+    
+    <!-- Permissions -->
+    <string name="permission_accessibility_required">Accessibility Service Required</string>
+    <string name="permission_accessibility_enable">Enable</string>
+    <string name="permission_notification_required">Notifications Required</string>
+    <string name="permission_storage_required">Storage Access Required</string>
+    <string name="permission_overlay_required">Overlay Permission Required</string>
+    
+    <!-- Tasks -->
+    <string name="tasks_title">Task Orchestrator</string>
+    <string name="tasks_empty">No scheduled tasks</string>
+    <string name="tasks_create_hint">Create tasks in the Scheduler tab</string>
+    <string name="tasks_active">Active Tasks</string>
+    <string name="tasks_all">All</string>
+    
+    <!-- Scheduler -->
+    <string name="scheduler_title">Scheduler</string>
+    <string name="scheduler_subtitle">Create Timed &amp; Conditional Tasks</string>
+    <string name="task_name_label">Task Name</string>
+    <string name="task_name_hint">e.g., Weather Monitor</string>
+    <string name="task_type_label">Task Type</string>
+    <string name="trigger_label">Trigger</string>
+    <string name="action_label">Action (optional)</string>
+    <string name="create_task">Schedule Task</string>
+    <string name="task_created">Task created and scheduled</string>
+    
+    <!-- Swarm -->
+    <string name="swarm_title">Swarm Nexus</string>
+    <string name="swarm_subtitle">Multi-Agent Orchestration</string>
+    <string name="swarm_empty">No Agents Connected</string>
+    <string name="swarm_empty_hint">Tap + to add swarm agents</string>
+    <string name="swarm_add_agent">Add Swarm Agent</string>
+    <string name="swarm_agent_name">Agent Name</string>
+    <string name="swarm_agent_type">Agent Type</string>
+    <string name="swarm_agent_key">Gemini API Key</string>
+    <string name="swarm_add">Add Agent</string>
+    
+    <!-- Vault -->
+    <string name="vault_title">Vault</string>
+    <string name="vault_storage">Storage</string>
+    <string name="vault_delete">Delete</string>
+    <string name="vault_rename">Rename</string>
+    <string name="vault_cancel">Cancel</string>
+    
+    <!-- NetSurfer -->
+    <string name="netsurfer_title">NetSurfer</string>
+    <string name="netsurfer_url_hint">Enter URL…</string>
+    <string name="netsurfer_analyze">Analyze Page</string>
+    
+    <!-- Market -->
+    <string name="market_title">Aura Market</string>
+    <string name="market_subtitle">AI Services // Direct Purchase // 0% Commission</string>
+    <string name="market_order">Order Now</string>
+    <string name="market_inquire">Inquire Now</string>
+    <string name="market_place_order">Place Order</string>
+    <string name="market_your_name">Your Name</string>
+    <string name="market_requirements">Requirements</string>
+    <string name="market_telegram">Telegram</string>
+    <string name="market_email">Email</string>
+    <string name="market_gigs">Active Gigs</string>
+    <string name="market_orders">Your Orders</string>
+    
+    <!-- Matrix -->
+    <string name="matrix_title">Deep Matrix</string>
+    <string name="matrix_subtitle">System Logs // Debug Terminal</string>
+    <string name="matrix_empty">No log entries</string>
+    <string name="matrix_clear">Clear Logs</string>
+    
+    <!-- General -->
+    <string name="cancel">Cancel</string>
+    <string name="close">Close</string>
+    <string name="confirm">Confirm</string>
+    <string name="ok">OK</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+    <string name="done">Done</string>
 </resources>

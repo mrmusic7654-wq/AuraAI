@@ -1,3 +1,7 @@
-package com.aura.ai.domain.usecases.settings.ExportDataUseCase
+package com.aura.ai.domain.usecases.settings
 
-// TODO: Implement
+import javax.inject.Inject
+
+class ExportDataUseCase @Inject constructor() {
+    suspend operator fun invoke(): Result<Unit> = Result.success(Unit)
+}

@@ -1,3 +1,7 @@
-package com.aura.ai.data.models.github.GitHubBranch
+package com.aura.ai.data.models.github
 
-// TODO: Implement
+data class GitHubBranch(
+    val name: String,
+    val sha: String,
+    val url: String
+)

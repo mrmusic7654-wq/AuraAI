@@ -1,3 +1,8 @@
-package com.aura.ai.domain.usecases.settings.UpdateUserPreferencesUseCase
+package com.aura.ai.domain.usecases.settings
 
-// TODO: Implement
+import javax.inject.Inject
+
+class UpdateUserPreferencesUseCase @Inject constructor() {
+    fun updateModel(model: String) {}
+    fun updateUserName(name: String) {}
+}

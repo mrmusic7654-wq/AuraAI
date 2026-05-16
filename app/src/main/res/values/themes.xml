@@ -1,3 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.AuraAI" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Main app theme -->
+    <style name="Theme.AuraAI" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/aura_purple</item>
+        <item name="android:navigationBarColor">@color/dark_background</item>
+    </style>
+    
+    <!-- Splash screen theme -->
+    <style name="Theme.AuraAI.Splash" parent="Theme.AuraAI">
+        <item name="android:windowBackground">@color/aura_purple</item>
+    </style>
 </resources>
