@@ -1,5 +1,11 @@
 package com.aura.ai.presentation.screens.agent
 
+// ADD THESE IMPORTS at the top of AgentViewModel.kt
+import com.aura.ai.data.local.database.SessionDatabase
+import com.aura.ai.data.local.database.SessionEntity
+import com.aura.ai.data.local.database.MessageEntity
+import com.aura.ai.data.local.database.ModelUsageEntity
+import kotlinx.coroutines.flow.Flow
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
