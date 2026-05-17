@@ -127,6 +127,13 @@ class AuraPreferences @Inject constructor(
         if (firstRun) prefs.edit().putBoolean("first_run", false).apply()
         return firstRun
     }
+    fun setPreferredModel(model: String) {
+    prefs.edit().putString("preferred_model", model).apply()
+}
+
+fun getPreferredModel(): String? {
+    return prefs.getString("preferred_model", null)
+}
 
     // ============================================
     // DATA MANAGEMENT
