@@ -1305,64 +1305,18 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
         for (i in 0 until node.childCount) { node.getChild(i)?.let { findAccessibilityNode(it, text)?.let { return it } } }; return null
     }
 
-    // ============================================
+        // ============================================
     // UTILITY FUNCTIONS
     // ============================================
 
     private fun resolveAppPackage(name: String): String? = when (name.lowercase()) {
-        "whatsapp" -> "com.whatsapp"
-        "youtube" -> "com.google.android.youtube"
-        "chrome" -> "com.android.chrome"
-        "settings" -> "com.android.settings"
-        "camera" -> "com.android.camera"
-        "gallery", "photos" -> "com.google.android.apps.photos"
-        "gmail" -> "com.google.android.gm"
-        "maps" -> "com.google.android.apps.maps"
-        "play store" -> "com.android.vending"
-        else -> null
+        "whatsapp" -> "com.whatsapp"; "youtube" -> "com.google.android.youtube"; "chrome" -> "com.android.chrome"; "settings" -> "com.android.settings"; "camera" -> "com.android.camera"; "gallery", "photos" -> "com.google.android.apps.photos"; "gmail" -> "com.google.android.gm"; "maps" -> "com.google.android.apps.maps"; "play store" -> "com.android.vending"; else -> null
     }
 
-    private fun getRamUsage(): String {
-        val am = com.aura.ai.AuraApplication.instance.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val mi = ActivityManager.MemoryInfo()
-        am.getMemoryInfo(mi)
-        return "${(mi.totalMem-mi.availMem)/(1024*1024*1024)}GB/${mi.totalMem/(1024*1024*1024)}GB"
-    }
-
-    private fun getStorageInfo(): String {
-        val stat = StatFs(Environment.getDataDirectory().path)
-        return "${stat.availableBlocksLong*stat.blockSizeLong/(1024*1024*1024)}GB/${stat.blockCountLong*stat.blockSizeLong/(1024*1024*1024)}GB"
-    }
-
-    private fun getBatteryLevel(): String = try {
-        val bm = com.aura.ai.AuraApplication.instance.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-        "${bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)}%"
-    } catch (e: Exception) { "Unknown" }
-
-    private fun recursiveFileSearch(dir: File, query: String, results: MutableList<String>, depth: Int) {
-        if (depth < 0 || results.size >= 50) return
-        try {
-            dir.listFiles()?.forEach { file ->
-                if (file.name.contains(query, true)) results.add(file.absolutePath)
-                if (file.isDirectory && results.size < 50) recursiveFileSearch(file, query, results, depth-1)
-            }
-        } catch (e: Exception) { }
-    }
-
-    private fun formatFileSize(bytes: Long): String = when {
-        bytes < 1024 -> "$bytes B"
-        bytes < 1024*1024 -> "${bytes/1024} KB"
-        bytes < 1024*1024*1024 -> "${bytes/(1024*1024)} MB"
-        else -> "${bytes/(1024*1024*1024)} GB"
-    }
-
-    private suspend fun generateProjectFileList(key: String, appName: String, description: String): List<String> {
-        val model = GenerativeModel(selectOptimalModel("code_gen", appName), key, generationConfig { temperature = 0.15f; maxOutputTokens = 4096 })
-        return try {
-            val response = model.generateContent(content { text("Generate file list for: $appName - $description. Return JSON array.") }).text ?: return emptyList()
-            recordModelUsage(model.modelName)
-            val jsonStr = response.substringAfter("[").substringBeforeLast("]").let { "[$it]" }
-            (0 until JSONArray(jsonStr).length()).map { JSONArray(jsonStr).getString(it) }
-             } catch (e: Exception) { emptyList() }
-         }
-      }
+    private fun getRamUsage(): String { val am = com.aura.ai.AuraApplication.instance.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager; val mi = ActivityManager.MemoryInfo(); am.getMemoryInfo(mi); return "${(mi.totalMem-mi.availMem)/(1024*1024*1024)}GB/${mi.totalMem/(1024*1024*1024)}GB" }
+    private fun getStorageInfo(): String { val stat = StatFs(Environment.getDataDirectory().path); return "${stat.availableBlocksLong*stat.blockSizeLong/(1024*1024*1024)}GB/${stat.blockCountLong*stat.blockSizeLong/(1024*1024*1024)}GB" }
+    private fun getBatteryLevel(): String = try { val bm = com.aura.ai.AuraApplication.instance.getSystemService(Context.BATTERY_SERVICE) as BatteryManager; "${bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)}%" } catch (e: Exception) { "Unknown" }
+    private fun recursiveFileSearch(dir: File, query: String, results: MutableList<String>, depth: Int) { if (depth < 0 || results.size >= 50) return; try { dir.listFiles()?.forEach { if (it.name.contains(query, true)) results.add(it.absolutePath); if (it.isDirectory && results.size < 50) recursiveFileSearch(it, query, results, depth-1) } } catch (e: Exception) {} }
+    private fun formatFileSize(bytes: Long): String = when { bytes < 1024 -> "$bytes B"; bytes < 1024*1024 -> "${bytes/1024} KB"; bytes < 1024*1024*1024 -> "${bytes/(1024*1024)} MB"; else -> "${bytes/(1024*1024*1024)} GB" }
+    private suspend fun generateProjectFileList(key: String, appName: String, description: String): List<String> { val model = GenerativeModel(selectOptimalModel("code_gen", appName), key, generationConfig { temperature = 0.15f; maxOutputTokens = 4096 }); return try { val response = model.generateContent(content { text("Generate file list for: $appName - $description. Return JSON array.") }).text ?: return emptyList(); recordModelUsage(model.modelName); val jsonStr = response.substringAfter("[").substringBeforeLast("]").let { "[$it]" }; (0 until JSONArray(jsonStr).length()).map { JSONArray(jsonStr).getString(it) } } catch (e: Exception) { emptyList() } }
+ }
