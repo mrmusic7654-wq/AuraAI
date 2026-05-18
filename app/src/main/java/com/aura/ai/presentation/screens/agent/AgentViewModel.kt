@@ -1363,6 +1363,6 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
             recordModelUsage(model.modelName)
             val jsonStr = response.substringAfter("[").substringBeforeLast("]").let { "[$it]" }
             (0 until JSONArray(jsonStr).length()).map { JSONArray(jsonStr).getString(it) }
-        } catch (e: Exception) { emptyList() }
-    }
-                           }
+             } catch (e: Exception) { emptyList() }
+         }
+      }
