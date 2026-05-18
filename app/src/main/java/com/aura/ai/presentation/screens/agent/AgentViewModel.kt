@@ -1441,4 +1441,5 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
             (0 until JSONArray(jsonStr).length()).map { JSONArray(jsonStr).getString(it) }
         } catch (e: Exception) { emptyList() }
     }
-                           }
+  }                        
+}
