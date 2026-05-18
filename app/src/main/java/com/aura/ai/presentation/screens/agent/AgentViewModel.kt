@@ -1086,8 +1086,9 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
             } catch (e: Exception) { "❌ Analysis failed: ${e.message}" }
         }
     }
-
-    private suspend fun transferFeaturesFromRepo(token: String, key: String, instruction: String): String {
+        private suspend fun transferFeaturesFromRepo(
+        token: String, key: String, instruction: String
+    ): String {
         if (activeOwner.isBlank() || activeRepo.isBlank()) return "❌ Set active repo first."
         addProgressMessage("🧠 Understanding transfer: $instruction")
         return withContext(Dispatchers.IO) {
@@ -1095,10 +1096,14 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
                 val analysis = parseFeatureTransferRequest(key, instruction) ?: return@withContext "❌ Could not understand request."
                 addProgressMessage("📁 Analyzing source: ${analysis.sourceOwner}/${analysis.sourceRepo}")
                 val sourceFiles = getFileTree(token, analysis.sourceOwner, analysis.sourceRepo)
-                val relevantFiles = sourceFiles.filter { p -> analysis.targetFeatures.any { p.lowercase().contains(it.lowercase()) } || p.lowercase().contains(analysis.sourceRepo.lowercase()) }
+                val relevantFiles = sourceFiles.filter { p -> 
+                    analysis.targetFeatures.any { p.lowercase().contains(it.lowercase()) } || 
+                    p.lowercase().contains(analysis.sourceRepo.lowercase()) 
+                }
                 addProgressMessage("📋 Found ${relevantFiles.size} relevant files. Adapting...")
                 val currentFiles = getFileTree(token, activeOwner, activeRepo)
-                var created = 0; var modified = 0
+                var created = 0
+                var modified = 0
                 for (sourcePath in relevantFiles.take(25)) {
                     try {
                         val sourceContent = readFileContent(token, analysis.sourceOwner, analysis.sourceRepo, sourcePath) ?: continue
@@ -1106,8 +1111,14 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
                         val targetPath = determineTargetPath(sourcePath, activeRepo)
                         val encoded = android.util.Base64.encodeToString(adaptedFile.toByteArray(), android.util.Base64.NO_WRAP)
                         val exists = currentFiles.any { it.equals(targetPath, true) }
-                        if (exists) { val sha = getFileSha(token, activeOwner, activeRepo, targetPath); if (sha != null) { if (!githubApiCall("PUT", "https://api.github.com/repos/$activeOwner/$activeRepo/contents/$targetPath", token, """{"message":"Transfer: ${analysis.sourceRepo} - $instruction","content":"$encoded","sha":"$sha"}""").startsWith("❌")) modified++ } }
-                        else { if (!githubApiCall("PUT", "https://api.github.com/repos/$activeOwner/$activeRepo/contents/$targetPath", token, """{"message":"Added: ${analysis.sourceRepo} - $targetPath","content":"$encoded"}""").startsWith("❌")) created++ }
+                        if (exists) {
+                            val sha = getFileSha(token, activeOwner, activeRepo, targetPath)
+                            if (sha != null) {
+                                if (!githubApiCall("PUT", "https://api.github.com/repos/$activeOwner/$activeRepo/contents/$targetPath", token, """{"message":"Transfer: ${analysis.sourceRepo} - $instruction","content":"$encoded","sha":"$sha"}""").startsWith("❌")) modified++
+                            }
+                        } else {
+                            if (!githubApiCall("PUT", "https://api.github.com/repos/$activeOwner/$activeRepo/contents/$targetPath", token, """{"message":"Added: ${analysis.sourceRepo} - $targetPath","content":"$encoded"}""").startsWith("❌")) created++
+                        }
                     } catch (e: Exception) { continue }
                 }
                 "✅ TRANSFER COMPLETE\n📥 ${analysis.sourceOwner}/${analysis.sourceRepo}\n📤 $activeOwner/$activeRepo\n📄 Created: $created | ✏️ Modified: $modified\n• compile repo $activeOwner/$activeRepo"
@@ -1136,7 +1147,11 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
         try {
             var response = client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/git/trees/main?recursive=1").header("Authorization", "Bearer $token").build()).execute()
             if (!response.isSuccessful) response = client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/git/trees/master?recursive=1").header("Authorization", "Bearer $token").build()).execute()
-            if (response.isSuccessful) { val json = JSONObject(response.body?.string() ?: "{}"); (0 until (json.optJSONArray("tree")?.length() ?: 0)).map { json.getJSONArray("tree").getJSONObject(it).getString("path") }.filter { it !in listOf(".gitignore", "README.md", "LICENSE") } } else emptyList()
+            if (response.isSuccessful) {
+                val json = JSONObject(response.body?.string() ?: "{}")
+                val tree = json.optJSONArray("tree") ?: return@withContext emptyList()
+                (0 until tree.length()).map { tree.getJSONObject(it).getString("path") }.filter { it !in listOf(".gitignore", "README.md", "LICENSE") }
+            } else emptyList()
         } catch (e: Exception) { emptyList() }
     }
 
@@ -1151,7 +1166,8 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
     private suspend fun readFileContent(token: String, owner: String, repo: String, path: String): String? = withContext(Dispatchers.IO) {
         try {
             val json = JSONObject(client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/contents/$path").header("Authorization", "Bearer $token").build()).execute().body?.string() ?: "{}")
-            val content = json.optString("content", ""); if (content.isNotBlank()) String(android.util.Base64.decode(content, android.util.Base64.DEFAULT)) else null
+            val content = json.optString("content", "")
+            if (content.isNotBlank()) String(android.util.Base64.decode(content, android.util.Base64.DEFAULT)) else null
         } catch (e: Exception) { null }
     }
 
@@ -1170,7 +1186,13 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
             val response = model.generateContent(content { text("Analyze this Android repo.\nREPO: ${repoInfo.description}\nFILES (${fileTree.size}):\n${fileTree.take(30).joinToString("\n")}\nKEY FILES:\n$filesSummary\nReturn JSON: {\"architecture\":\"...\",\"keyFeatures\":[\"...\"],\"dependencies\":[\"...\"],\"coreLogic\":{\"file.kt\":\"desc\"}}") }).text ?: RepoAnalysis("Unknown", emptyList(), emptyMap(), emptyList(), emptyMap())
             recordModelUsage("gemini-2.5-flash")
             val obj = JSONObject(response.substringAfter("{").substringBeforeLast("}").let { "{$it}" })
-            RepoAnalysis(obj.optString("architecture", ""), (0 until obj.getJSONArray("keyFeatures").length()).map { obj.getJSONArray("keyFeatures").getString(it) }, fileTree.associateWith { "File" }, (0 until obj.getJSONArray("dependencies").length()).map { obj.getJSONArray("dependencies").getString(it) }, emptyMap())
+            RepoAnalysis(
+                obj.optString("architecture", ""),
+                (0 until obj.getJSONArray("keyFeatures").length()).map { obj.getJSONArray("keyFeatures").getString(it) },
+                fileTree.associateWith { "File" },
+                (0 until obj.getJSONArray("dependencies").length()).map { obj.getJSONArray("dependencies").getString(it) },
+                emptyMap()
+            )
         } catch (e: Exception) { RepoAnalysis("Analysis failed", emptyList(), emptyMap(), emptyList(), emptyMap()) }
     }
 
@@ -1180,31 +1202,35 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
             val response = model.generateContent(content { text("Parse: \"$instruction\"\nActive: $activeOwner/$activeRepo\nReturn JSON: {\"sourceOwner\":\"...\",\"sourceRepo\":\"...\",\"targetFeatures\":[\"...\"],\"additionalContext\":\"...\"}") }).text ?: return null
             recordModelUsage("gemini-3.1-flash-lite")
             val obj = JSONObject(response.substringAfter("{").substringBeforeLast("}").let { "{$it}" })
-            FeatureTransferRequest(obj.optString("sourceOwner"), obj.optString("sourceRepo"), (0 until obj.getJSONArray("targetFeatures").length()).map { obj.getJSONArray("targetFeatures").getString(it) }, obj.optString("additionalContext"))
+            FeatureTransferRequest(
+                obj.optString("sourceOwner"),
+                obj.optString("sourceRepo"),
+                (0 until obj.getJSONArray("targetFeatures").length()).map { obj.getJSONArray("targetFeatures").getString(it) },
+                obj.optString("additionalContext")
+            )
         } catch (e: Exception) { null }
     }
 
-    private suspend fun adaptFileForTargetRepo(key: String, sourcePath: String, sourceContent: String, sourceOwner: String, sourceRepo: String, targetOwner: String, targetRepo: String, instruction: String, currentTargetFiles: List<String>): String? {
+    private suspend fun adaptFileForTargetRepo(
+        key: String, sourcePath: String, sourceContent: String,
+        sourceOwner: String, sourceRepo: String, targetOwner: String, targetRepo: String,
+        instruction: String, currentTargetFiles: List<String>
+    ): String? {
         val model = GenerativeModel("gemini-2.5-flash", key, generationConfig { temperature = 0.15f; maxOutputTokens = 16384 })
         return try {
             val response = model.generateContent(content { text("Adapt code.\nSOURCE: $sourceOwner/$sourceRepo\nTARGET: $targetOwner/$targetRepo\nPATH: $sourcePath\nINSTRUCTION: $instruction\nTARGET FILES:\n${currentTargetFiles.take(20).joinToString("\n")}\nSOURCE CODE:\n```\n$sourceContent\n```\nReturn ONLY adapted code.") }).text
-            recordModelUsage("gemini-2.5-flash"); response
+            recordModelUsage("gemini-2.5-flash")
+            response
         } catch (e: Exception) { null }
     }
 
     private fun determineTargetPath(sourcePath: String, targetRepo: String): String {
-    return when {
-        sourcePath.contains("src/main/java/") -> {
-            val packagePath = sourcePath.substringAfter("src/main/java/")
-            "app/src/main/java/$packagePath"
+        return when {
+            sourcePath.contains("src/main/java/") -> "app/src/main/java/" + sourcePath.substringAfter("src/main/java/")
+            sourcePath.contains("src/main/res/") -> "app/$sourcePath"
+            sourcePath.startsWith("app/") -> sourcePath
+            else -> "app/src/main/java/com/example/${targetRepo.lowercase()}/" + sourcePath.substringAfterLast("/")
         }
-        sourcePath.contains("src/main/res/") -> "app/$sourcePath"
-        sourcePath.startsWith("app/") -> sourcePath
-        else -> {
-            val fileName = sourcePath.substringAfterLast("/")
-            "app/src/main/java/com/example/${targetRepo.lowercase()}/$fileName"
-        }
-    }
     }
 
     // ============================================
@@ -1213,13 +1239,26 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
 
     private suspend fun githubApiCall(method: String, url: String, token: String, body: String?): String = withContext(Dispatchers.IO) {
         try {
-            val request = Request.Builder().url(url).header("Authorization", "Bearer $token").header("Accept", "application/vnd.github.v3+json").header("Content-Type", "application/json").apply { when (method) { "POST" -> post((body ?: "{}").toRequestBody("application/json".toMediaType())); "PUT" -> put((body ?: "{}").toRequestBody("application/json".toMediaType())) } }.build()
+            val request = Request.Builder().url(url)
+                .header("Authorization", "Bearer $token")
+                .header("Accept", "application/vnd.github.v3+json")
+                .header("Content-Type", "application/json")
+                .apply {
+                    when (method) {
+                        "POST" -> post((body ?: "{}").toRequestBody("application/json".toMediaType()))
+                        "PUT" -> put((body ?: "{}").toRequestBody("application/json".toMediaType()))
+                    }
+                }.build()
             val response = client.newCall(request).execute()
             if (response.isSuccessful) {
                 val responseBody = response.body?.string() ?: "OK"
                 when {
                     method == "POST" && url.contains("/user/repos") -> "✅ Repository created: ${Regex("\"full_name\"\\s*:\\s*\"([^\"]+)\"").find(responseBody)?.groupValues?.get(1) ?: "created"}"
-                    method == "GET" && url.contains("/user/repos") && !url.contains("/contents") -> { val repos = JSONArray(responseBody); if (repos.length() == 0) "📁 No repos." else "📁 Repos:\n" + (0 until minOf(repos.length(), 10)).joinToString("\n") { "• ${repos.getJSONObject(it).getString("full_name")}" } }
+                    method == "GET" && url.contains("/user/repos") && !url.contains("/contents") -> {
+                        val repos = JSONArray(responseBody)
+                        if (repos.length() == 0) "📁 No repos."
+                        else "📁 Repos:\n" + (0 until minOf(repos.length(), 10)).joinToString("\n") { "• ${repos.getJSONObject(it).getString("full_name")}" }
+                    }
                     else -> responseBody
                 }
             } else "❌ GitHub API error: ${response.code}"
@@ -1247,7 +1286,8 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
     private suspend fun readRepoFileContents(token: String, owner: String, repo: String, path: String): String = withContext(Dispatchers.IO) {
         try {
             val json = JSONObject(client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/contents/$path").header("Authorization", "Bearer $token").build()).execute().body?.string() ?: "{}")
-            val content = json.optString("content", ""); if (content.isBlank()) return@withContext "📄 Empty"
+            val content = json.optString("content", "")
+            if (content.isBlank()) return@withContext "📄 Empty"
             val decoded = String(android.util.Base64.decode(content, android.util.Base64.DEFAULT))
             if (decoded.length > 3000) "📄 $path (${decoded.length} chars):\n\n${decoded.take(3000)}\n\n..." else "📄 $path:\n\n$decoded"
         } catch (e: Exception) { "❌ Error: ${e.message}" }
@@ -1256,7 +1296,8 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
     private suspend fun repairFileInRepo(token: String, key: String, owner: String, repo: String, path: String, instruction: String): String = withContext(Dispatchers.IO) {
         try {
             val readJson = JSONObject(client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/contents/$path").header("Authorization", "Bearer $token").build()).execute().body?.string() ?: "{}")
-            val currentContent = String(android.util.Base64.decode(readJson.getString("content"), android.util.Base64.DEFAULT)); val sha = readJson.getString("sha")
+            val currentContent = String(android.util.Base64.decode(readJson.getString("content"), android.util.Base64.DEFAULT))
+            val sha = readJson.getString("sha")
             val model = GenerativeModel(selectOptimalModel("debug", "fix $path"), key, generationConfig { temperature = 0.1f; maxOutputTokens = 16384 })
             val newContent = model.generateContent(content { text("Fix file.\nCURRENT:\n```\n$currentContent\n```\nINSTRUCTION: $instruction\nReturn ONLY fixed code.") }).text ?: return@withContext "❌ Empty"
             recordModelUsage(model.modelName)
@@ -1280,43 +1321,124 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
     // ============================================
 
     private fun performTapOnText(service: AuraAccessibilityService, text: String): Boolean {
-        val root = service.rootInActiveWindow ?: return false; val node = findAccessibilityNode(root, text)
-        return if (node != null) { val rect = android.graphics.Rect(); node.getBoundsInScreen(rect); root.recycle(); node.recycle(); service.dispatchGesture(android.accessibilityservice.GestureDescription.Builder().addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(android.graphics.Path().apply { moveTo(rect.centerX().toFloat(), rect.centerY().toFloat()) }, 0, 100)).build(), null, null) } else { root.recycle(); false }
+        val root = service.rootInActiveWindow ?: return false
+        val node = findAccessibilityNode(root, text)
+        return if (node != null) {
+            val rect = android.graphics.Rect()
+            node.getBoundsInScreen(rect)
+            root.recycle()
+            node.recycle()
+            service.dispatchGesture(
+                android.accessibilityservice.GestureDescription.Builder()
+                    .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(
+                        android.graphics.Path().apply { moveTo(rect.centerX().toFloat(), rect.centerY().toFloat()) }, 0, 100))
+                    .build(), null, null
+            )
+            true
+        } else {
+            root.recycle()
+            false
+        }
     }
 
     private fun performTypeText(service: AuraAccessibilityService, text: String): Boolean {
         val focused = service.findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
-        val args = android.os.Bundle().apply { putCharSequence(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text) }
-        val result = focused.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT, args); focused.recycle(); return result
+        val args = android.os.Bundle().apply {
+            putCharSequence(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+        }
+        val result = focused.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        focused.recycle()
+        return result
     }
 
     private fun performScroll(service: AuraAccessibilityService, up: Boolean) {
         val d = service.resources.displayMetrics
-        service.dispatchGesture(android.accessibilityservice.GestureDescription.Builder().addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(if (up) android.graphics.Path().apply { moveTo(d.widthPixels/2f, d.heightPixels*0.3f); lineTo(d.widthPixels/2f, d.heightPixels*0.8f) } else android.graphics.Path().apply { moveTo(d.widthPixels/2f, d.heightPixels*0.8f); lineTo(d.widthPixels/2f, d.heightPixels*0.3f) }, 0, 300)).build(), null, null)
+        val path = if (up) {
+            android.graphics.Path().apply { moveTo(d.widthPixels/2f, d.heightPixels*0.3f); lineTo(d.widthPixels/2f, d.heightPixels*0.8f) }
+        } else {
+            android.graphics.Path().apply { moveTo(d.widthPixels/2f, d.heightPixels*0.8f); lineTo(d.widthPixels/2f, d.heightPixels*0.3f) }
+        }
+        service.dispatchGesture(
+            android.accessibilityservice.GestureDescription.Builder()
+                .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 300))
+                .build(), null, null
+        )
     }
 
     private fun performSwipe(service: AuraAccessibilityService, right: Boolean) {
         val d = service.resources.displayMetrics
-        service.dispatchGesture(android.accessibilityservice.GestureDescription.Builder().addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(if (right) android.graphics.Path().apply { moveTo(d.widthPixels*0.2f, d.heightPixels/2f); lineTo(d.widthPixels*0.8f, d.heightPixels/2f) } else android.graphics.Path().apply { moveTo(d.widthPixels*0.8f, d.heightPixels/2f); lineTo(d.widthPixels*0.2f, d.heightPixels/2f) }, 0, 300)).build(), null, null)
+        val path = if (right) {
+            android.graphics.Path().apply { moveTo(d.widthPixels*0.2f, d.heightPixels/2f); lineTo(d.widthPixels*0.8f, d.heightPixels/2f) }
+        } else {
+            android.graphics.Path().apply { moveTo(d.widthPixels*0.8f, d.heightPixels/2f); lineTo(d.widthPixels*0.2f, d.heightPixels/2f) }
+        }
+        service.dispatchGesture(
+            android.accessibilityservice.GestureDescription.Builder()
+                .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 300))
+                .build(), null, null
+        )
     }
 
     private fun findAccessibilityNode(node: android.view.accessibility.AccessibilityNodeInfo, text: String): android.view.accessibility.AccessibilityNodeInfo? {
         if (node.text?.contains(text, true) == true || node.contentDescription?.contains(text, true) == true) return node
-        for (i in 0 until node.childCount) { node.getChild(i)?.let { findAccessibilityNode(it, text)?.let { return it } } }; return null
+        for (i in 0 until node.childCount) {
+            node.getChild(i)?.let { findAccessibilityNode(it, text)?.let { return it } }
+        }
+        return null
     }
 
-        // ============================================
+    // ============================================
     // UTILITY FUNCTIONS
     // ============================================
 
     private fun resolveAppPackage(name: String): String? = when (name.lowercase()) {
-        "whatsapp" -> "com.whatsapp"; "youtube" -> "com.google.android.youtube"; "chrome" -> "com.android.chrome"; "settings" -> "com.android.settings"; "camera" -> "com.android.camera"; "gallery", "photos" -> "com.google.android.apps.photos"; "gmail" -> "com.google.android.gm"; "maps" -> "com.google.android.apps.maps"; "play store" -> "com.android.vending"; else -> null
+        "whatsapp" -> "com.whatsapp"; "youtube" -> "com.google.android.youtube"; "chrome" -> "com.android.chrome"
+        "settings" -> "com.android.settings"; "camera" -> "com.android.camera"
+        "gallery", "photos" -> "com.google.android.apps.photos"; "gmail" -> "com.google.android.gm"
+        "maps" -> "com.google.android.apps.maps"; "play store" -> "com.android.vending"
+        else -> null
     }
 
-    private fun getRamUsage(): String { val am = com.aura.ai.AuraApplication.instance.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager; val mi = ActivityManager.MemoryInfo(); am.getMemoryInfo(mi); return "${(mi.totalMem-mi.availMem)/(1024*1024*1024)}GB/${mi.totalMem/(1024*1024*1024)}GB" }
-    private fun getStorageInfo(): String { val stat = StatFs(Environment.getDataDirectory().path); return "${stat.availableBlocksLong*stat.blockSizeLong/(1024*1024*1024)}GB/${stat.blockCountLong*stat.blockSizeLong/(1024*1024*1024)}GB" }
-    private fun getBatteryLevel(): String = try { val bm = com.aura.ai.AuraApplication.instance.getSystemService(Context.BATTERY_SERVICE) as BatteryManager; "${bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)}%" } catch (e: Exception) { "Unknown" }
-    private fun recursiveFileSearch(dir: File, query: String, results: MutableList<String>, depth: Int) { if (depth < 0 || results.size >= 50) return; try { dir.listFiles()?.forEach { if (it.name.contains(query, true)) results.add(it.absolutePath); if (it.isDirectory && results.size < 50) recursiveFileSearch(it, query, results, depth-1) } } catch (e: Exception) {} }
-    private fun formatFileSize(bytes: Long): String = when { bytes < 1024 -> "$bytes B"; bytes < 1024*1024 -> "${bytes/1024} KB"; bytes < 1024*1024*1024 -> "${bytes/(1024*1024)} MB"; else -> "${bytes/(1024*1024*1024)} GB" }
-    private suspend fun generateProjectFileList(key: String, appName: String, description: String): List<String> { val model = GenerativeModel(selectOptimalModel("code_gen", appName), key, generationConfig { temperature = 0.15f; maxOutputTokens = 4096 }); return try { val response = model.generateContent(content { text("Generate file list for: $appName - $description. Return JSON array.") }).text ?: return emptyList(); recordModelUsage(model.modelName); val jsonStr = response.substringAfter("[").substringBeforeLast("]").let { "[$it]" }; (0 until JSONArray(jsonStr).length()).map { JSONArray(jsonStr).getString(it) } } catch (e: Exception) { emptyList() } }
- }
+    private fun getRamUsage(): String {
+        val am = com.aura.ai.AuraApplication.instance.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val mi = ActivityManager.MemoryInfo(); am.getMemoryInfo(mi)
+        return "${(mi.totalMem-mi.availMem)/(1024*1024*1024)}GB/${mi.totalMem/(1024*1024*1024)}GB"
+    }
+
+    private fun getStorageInfo(): String {
+        val stat = StatFs(Environment.getDataDirectory().path)
+        return "${stat.availableBlocksLong*stat.blockSizeLong/(1024*1024*1024)}GB/${stat.blockCountLong*stat.blockSizeLong/(1024*1024*1024)}GB"
+    }
+
+    private fun getBatteryLevel(): String = try {
+        val bm = com.aura.ai.AuraApplication.instance.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+        "${bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)}%"
+    } catch (e: Exception) { "Unknown" }
+
+    private fun recursiveFileSearch(dir: File, query: String, results: MutableList<String>, depth: Int) {
+        if (depth < 0 || results.size >= 50) return
+        try {
+            dir.listFiles()?.forEach { file ->
+                if (file.name.contains(query, true)) results.add(file.absolutePath)
+                if (file.isDirectory && results.size < 50) recursiveFileSearch(file, query, results, depth-1)
+            }
+        } catch (e: Exception) { }
+    }
+
+    private fun formatFileSize(bytes: Long): String = when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024*1024 -> "${bytes/1024} KB"
+        bytes < 1024*1024*1024 -> "${bytes/(1024*1024)} MB"
+        else -> "${bytes/(1024*1024*1024)} GB"
+    }
+
+    private suspend fun generateProjectFileList(key: String, appName: String, description: String): List<String> {
+        val model = GenerativeModel(selectOptimalModel("code_gen", appName), key, generationConfig { temperature = 0.15f; maxOutputTokens = 4096 })
+        return try {
+            val response = model.generateContent(content { text("Generate file list for: $appName - $description. Return JSON array.") }).text ?: return emptyList()
+            recordModelUsage(model.modelName)
+            val jsonStr = response.substringAfter("[").substringBeforeLast("]").let { "[$it]" }
+            (0 until JSONArray(jsonStr).length()).map { JSONArray(jsonStr).getString(it) }
+        } catch (e: Exception) { emptyList() }
+    }
+                           }
