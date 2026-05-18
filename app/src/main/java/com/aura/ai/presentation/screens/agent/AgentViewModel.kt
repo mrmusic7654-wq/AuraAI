@@ -200,10 +200,13 @@ class AgentViewModel @Inject constructor(
     private var sessionLoadingJob: Job? = null
 
     init {
-        loadSessions()
-        loadModelUsage()
+    init {
+    loadSessions()
+    loadModelUsage()
+    loadPreferredModel()
+    viewModelScope.launch {
         resetDailyCountersIfNeeded()
-        loadPreferredModel()
+    }
     }
 
     // ============================================
@@ -914,10 +917,14 @@ Include ALL files needed for compilation. Return ONLY valid JSON.
                 obj.optString("structure", "")
             )
         } catch (e: Exception) {
-            val fallbackFiles = generateProjectFileList(key, appName, description)
-            AppArchitecture(fallbackFiles, "Standard Android", emptyList(), "Basic")
+    val fallbackFiles = generateProjectFileList(key, appName, description)
+    AppArchitecture(
+        files = fallbackFiles,
+        techStack = "Standard Android",
+        dependencies = emptyList(),
+        structure = "Basic"
+    )
         }
-    }
 
     private suspend fun generateAllFilesWithContext(
         key: String, appName: String, description: String,
@@ -1185,11 +1192,19 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
         } catch (e: Exception) { null }
     }
 
-    private fun determineTargetPath(sourcePath: String, targetRepo: String): String = when {
-        sourcePath.contains("src/main/java/") -> "app/src/main/java/${sourcePath.substringAfter("src/main/java/")}"
+    private fun determineTargetPath(sourcePath: String, targetRepo: String): String {
+    return when {
+        sourcePath.contains("src/main/java/") -> {
+            val packagePath = sourcePath.substringAfter("src/main/java/")
+            "app/src/main/java/$packagePath"
+        }
         sourcePath.contains("src/main/res/") -> "app/$sourcePath"
         sourcePath.startsWith("app/") -> sourcePath
-        else -> "app/src/main/java/com/example/${targetRepo.lowercase()}/${sourcePath.substringAfterLast("/")}"
+        else -> {
+            val fileName = sourcePath.substringAfterLast("/")
+            "app/src/main/java/com/example/${targetRepo.lowercase()}/$fileName"
+        }
+    }
     }
 
     // ============================================
