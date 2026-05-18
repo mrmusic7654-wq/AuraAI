@@ -1,4 +1,4 @@
-uppackage com.aura.ai.presentation.screens.agent
+package com.aura.ai.presentation.screens.agent
 
 import android.app.ActivityManager
 import android.content.Context
