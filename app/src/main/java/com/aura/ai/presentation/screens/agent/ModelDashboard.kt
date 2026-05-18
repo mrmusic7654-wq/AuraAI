@@ -19,16 +19,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aura.ai.presentation.theme.*
 
-data class ModelInfo(
-    val name: String,
-    val displayName: String,
-    val strength: String,
-    val dailyRequests: Int,
-    val dailyLimit: Int,
-    val isInCooldown: Boolean,
-    val isSelected: Boolean
-)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModelDashboard(
@@ -174,7 +164,7 @@ private fun ModelCard(
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 LinearProgressIndicator(
-                    progress = { usagePercent / 100f },
+                    progress = usagePercent / 100f,
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(4.dp)),
