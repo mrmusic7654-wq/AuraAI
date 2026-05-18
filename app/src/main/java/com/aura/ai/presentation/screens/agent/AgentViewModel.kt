@@ -1319,4 +1319,7 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
     private fun recursiveFileSearch(dir: File, query: String, results: MutableList<String>, depth: Int) { if (depth < 0 || results.size >= 50) return; try { dir.listFiles()?.forEach { if (it.name.contains(query, true)) results.add(it.absolutePath); if (it.isDirectory && results.size < 50) recursiveFileSearch(it, query, results, depth-1) } } catch (e: Exception) {} }
     private fun formatFileSize(bytes: Long): String = when { bytes < 1024 -> "$bytes B"; bytes < 1024*1024 -> "${bytes/1024} KB"; bytes < 1024*1024*1024 -> "${bytes/(1024*1024)} MB"; else -> "${bytes/(1024*1024*1024)} GB" }
     private suspend fun generateProjectFileList(key: String, appName: String, description: String): List<String> { val model = GenerativeModel(selectOptimalModel("code_gen", appName), key, generationConfig { temperature = 0.15f; maxOutputTokens = 4096 }); return try { val response = model.generateContent(content { text("Generate file list for: $appName - $description. Return JSON array.") }).text ?: return emptyList(); recordModelUsage(model.modelName); val jsonStr = response.substringAfter("[").substringBeforeLast("]").let { "[$it]" }; (0 until JSONArray(jsonStr).length()).map { JSONArray(jsonStr).getString(it) } } catch (e: Exception) { emptyList() } }
-}
+  }
+ }    
+                           
+    
