@@ -1497,12 +1497,18 @@ jobs:
     }
 
     private fun determineTargetPath(sourcePath: String, targetRepo: String): String {
-        return when {
-            sourcePath.contains("src/main/java/") -> "app/src/main/java/" + sourcePath.substringAfter("src/main/java/")
-            sourcePath.contains("src/main/res/") -> "app/$sourcePath"
-            sourcePath.startsWith("app/") -> sourcePath
-            else -> "app/src/main/java/com/example/${targetRepo.lowercase()}/" + sourcePath.substringAfterLast("/")
+    return when {
+        sourcePath.contains("src/main/java/") -> {
+            "app/src/main/java/" + sourcePath.substringAfter("src/main/java/")
         }
+        sourcePath.contains("src/main/res/") -> "app/" + sourcePath
+        sourcePath.startsWith("app/") -> sourcePath
+        else -> {
+            val fileName = sourcePath.substringAfterLast("/")
+            "app/src/main/java/com/example/" + targetRepo.lowercase() + "/" + fileName
+        }
+    }
+    }
     }
 
     // ============================================
