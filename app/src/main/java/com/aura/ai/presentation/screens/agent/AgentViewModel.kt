@@ -1494,7 +1494,6 @@ jobs:
             response
         } catch (e: Exception) { null }
     }
-
     private fun determineTargetPath(sourcePath: String, targetRepo: String): String {
     if (sourcePath.contains("src/main/java/")) {
         val idx = sourcePath.indexOf("src/main/java/") + "src/main/java/".length
@@ -1510,7 +1509,6 @@ jobs:
     val fileName = if (lastSlash >= 0) sourcePath.substring(lastSlash + 1) else sourcePath
     return "app/src/main/java/com/example/" + targetRepo.lowercase() + "/" + fileName
     }
-    
 
     // ============================================
     // GITHUB API OPERATIONS
