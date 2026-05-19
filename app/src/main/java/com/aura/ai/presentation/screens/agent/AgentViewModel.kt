@@ -1495,19 +1495,18 @@ jobs:
         } catch (e: Exception) { null }
     }
     private fun determineTargetPath(sourcePath: String, targetRepo: String): String {
-    if (sourcePath.contains("src/main/java/")) {
-        val idx = sourcePath.indexOf("src/main/java/") + "src/main/java/".length
-        return "app/src/main/java/" + sourcePath.substring(idx)
+    return if (sourcePath.contains("src/main/java/")) {
+        val parts = sourcePath.split("src/main/java/")
+        "app/src/main/java/" + parts[1]
+    } else if (sourcePath.contains("src/main/res/")) {
+        "app/" + sourcePath
+    } else if (sourcePath.startsWith("app/")) {
+        sourcePath
+    } else {
+        val parts = sourcePath.split("/")
+        val fileName = parts.last()
+        "app/src/main/java/com/example/" + targetRepo.lowercase() + "/" + fileName
     }
-    if (sourcePath.contains("src/main/res/")) {
-        return "app/" + sourcePath
-    }
-    if (sourcePath.startsWith("app/")) {
-        return sourcePath
-    }
-    val lastSlash = sourcePath.lastIndexOf("/")
-    val fileName = if (lastSlash >= 0) sourcePath.substring(lastSlash + 1) else sourcePath
-    return "app/src/main/java/com/example/" + targetRepo.lowercase() + "/" + fileName
     }
 
     // ============================================
