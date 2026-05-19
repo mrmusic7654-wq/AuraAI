@@ -1497,8 +1497,8 @@ jobs:
 
     private fun determineTargetPath(sourcePath: String, targetRepo: String): String {
     if (sourcePath.contains("src/main/java/")) {
-        val packagePath = sourcePath.substringAfter("src/main/java/")
-        return "app/src/main/java/" + packagePath
+        val idx = sourcePath.indexOf("src/main/java/") + "src/main/java/".length
+        return "app/src/main/java/" + sourcePath.substring(idx)
     }
     if (sourcePath.contains("src/main/res/")) {
         return "app/" + sourcePath
@@ -1506,7 +1506,8 @@ jobs:
     if (sourcePath.startsWith("app/")) {
         return sourcePath
     }
-    val fileName = sourcePath.substringAfterLast("/")
+    val lastSlash = sourcePath.lastIndexOf("/")
+    val fileName = if (lastSlash >= 0) sourcePath.substring(lastSlash + 1) else sourcePath
     return "app/src/main/java/com/example/" + targetRepo.lowercase() + "/" + fileName
     }
     
