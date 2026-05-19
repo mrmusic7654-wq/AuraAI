@@ -864,7 +864,7 @@ class AgentViewModel @Inject constructor(
             activeRepo = appName
             
             addProgressMessage("⚙️ Phase 3/5: Generating ${architecture.files.size} files with context awareness...")
-            val generatedFiles = generateAllFilesWithContext(key, appName, description, architecture)
+            val generatedFiles = generateAllFilesWithContext(key, appName, description, architecture.files, architecture)
             if (generatedFiles.isEmpty()) {
                 _state.value = _state.value.copy(isGeneratingApp = false)
                 return "❌ File generation failed."
@@ -976,17 +976,16 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
         var totalFixes = 0
         _state.value = _state.value.copy(buildLoop = BuildLoopState(maxAttempts = maxAttempts))
         addProgressMessage("🔨 Triggering initial build...")
-        var currentRunId = triggerWorkflowAndGetRunId(token, owner, repo)
-        if (currentRunId == null) {
-            return "⚠️ Files pushed. Use 'compile repo $owner/$repo' manually."
-        }
-        while (attempt < maxAttempts) {
-            attempt++
-            _state.value = _state.value.copy(
-                buildLoop = _state.value.buildLoop?.copy(
-                    attemptNumber = attempt,
-                    buildStatus = BuildStatus.BUILDING,
-                    workflowRunId = currentRunId
+        val initialTrigger = triggerWorkflowAndGetRunId(token, owner, repo)
+if (initialTrigger == null) {
+    return "⚠️ Files pushed..."
+}
+var currentRunId: Long = initialTrigger
+while (attempt < maxAttempts) {
+    attempt++
+    _state.value = _state.value.copy(
+        buildLoop = _state.value.buildLoop?.copy(
+            workflowRunId = currentRunId
                 )
             )
             addProgressMessage("🔨 Build $attempt/$maxAttempts...")
@@ -1499,7 +1498,8 @@ jobs:
     private fun determineTargetPath(sourcePath: String, targetRepo: String): String {
     return when {
         sourcePath.contains("src/main/java/") -> {
-            "app/src/main/java/" + sourcePath.substringAfter("src/main/java/")
+            val packagePath = sourcePath.substringAfter("src/main/java/")
+            "app/src/main/java/" + packagePath
         }
         sourcePath.contains("src/main/res/") -> "app/" + sourcePath
         sourcePath.startsWith("app/") -> sourcePath
