@@ -1441,7 +1441,7 @@ jobs:
             ).text ?: RepoAnalysis("Unknown", emptyList(), emptyMap(), emptyList(), emptyMap())
             recordModelUsage("gemini-2.5-flash")
            val jsonStr = response.substringAfter("{").substringBeforeLast("}")
-        val obj = JSONObject("{$jsonStr}")
+           val obj = JSONObject("{" + jsonStr + "}")
             RepoAnalysis(
                 obj.optString("architecture", ""),
                 (0 until obj.getJSONArray("keyFeatures").length()).map { obj.getJSONArray("keyFeatures").getString(it) },
