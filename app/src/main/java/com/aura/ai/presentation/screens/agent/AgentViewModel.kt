@@ -36,7 +36,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 // ============================================
-// DATA CLASSES
+// SECTION 1: DATA CLASSES
 // ============================================
 
 data class ChatMessage(val text: String, val isUser: Boolean)
@@ -130,7 +130,7 @@ enum class ExecutionMode {
 }
 
 // ============================================
-// INTERNAL DATA CLASSES
+// SECTION 2: INTERNAL DATA CLASSES
 // ============================================
 
 private data class AppArchitecture(
@@ -167,7 +167,7 @@ private sealed class WorkflowResult {
 }
 
 // ============================================
-// VIEWMODEL
+// SECTION 3: VIEWMODEL CLASS
 // ============================================
 
 @HiltViewModel
@@ -175,7 +175,10 @@ class AgentViewModel @Inject constructor(
     private val preferences: AuraPreferences
 ) : ViewModel() {
 
-    // ===== STATE MANAGEMENT =====
+    // ============================================
+    // SECTION 3.1: STATE MANAGEMENT
+    // ============================================
+
     private val _state = MutableStateFlow(AgentUiState())
     val state: StateFlow<AgentUiState> = _state.asStateFlow()
     private var taskJob: Job? = null
@@ -188,7 +191,10 @@ class AgentViewModel @Inject constructor(
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    // ===== SESSION MANAGEMENT =====
+    // ============================================
+    // SECTION 3.2: SESSION MANAGEMENT
+    // ============================================
+
     private val sessionDb by lazy {
         SessionDatabase.getInstance(com.aura.ai.AuraApplication.instance)
     }
@@ -209,7 +215,7 @@ class AgentViewModel @Inject constructor(
     }
 
     // ============================================
-    // SMART MODEL SELECTION SYSTEM
+    // SECTION 3.3: SMART MODEL SELECTION SYSTEM
     // ============================================
 
     private data class ModelSpec(val rpd: Int, val rpm: Int, val description: String)
@@ -305,7 +311,7 @@ class AgentViewModel @Inject constructor(
     private fun resetFailureState() { consecutiveFailures = 0 }
 
     // ============================================
-    // SESSION MANAGEMENT
+    // SECTION 3.4: SESSION OPERATIONS
     // ============================================
 
     private fun loadPreferredModel() {
@@ -397,7 +403,7 @@ class AgentViewModel @Inject constructor(
     }
 
     // ============================================
-    // MODEL MANAGEMENT
+    // SECTION 3.5: MODEL MANAGEMENT
     // ============================================
 
     private fun loadModelUsage() {
@@ -451,7 +457,7 @@ class AgentViewModel @Inject constructor(
     }
 
     // ============================================
-    // PUBLIC INTERFACE
+    // SECTION 3.6: PUBLIC INTERFACE
     // ============================================
 
     fun updateInput(text: String) {
@@ -484,7 +490,7 @@ class AgentViewModel @Inject constructor(
     }
 
     // ============================================
-    // COMMAND PIPELINE
+    // SECTION 3.7: COMMAND PIPELINE
     // ============================================
 
     private suspend fun executeCommandPipeline(input: String): String {
@@ -496,7 +502,7 @@ class AgentViewModel @Inject constructor(
     }
 
     // ============================================
-    // CONTROL COMMANDS
+    // SECTION 3.8: CONTROL COMMANDS
     // ============================================
 
     private fun handleControlCommand(input: String): Boolean {
@@ -505,6 +511,11 @@ class AgentViewModel @Inject constructor(
                 if (_state.value.isExecuting) {
                     isPaused = true
                     taskJob?.cancel()
+                    _state.value = _state.value.copy(
+                        messages = _state.value.messages + ChatMessage("⏸️ Task paused. Type 'resume' to continue.", false),
+                        loading = false
+                    )
+                } else {
                     _state.value = _state.value.copy(
                         messages = _state.value.messages + ChatMessage("⏸️ Task paused. Type 'resume' to continue.", false),
                         loading = false
@@ -549,7 +560,7 @@ class AgentViewModel @Inject constructor(
     }
 
     // ============================================
-    // PHONE CONTROL
+    // SECTION 3.9: PHONE CONTROL
     // ============================================
 
     private suspend fun executePhoneCommand(input: String): String? {
@@ -594,7 +605,7 @@ class AgentViewModel @Inject constructor(
     }
 
     // ============================================
-    // GITHUB COMMANDS
+    // SECTION 3.10: GITHUB COMMANDS
     // ============================================
 
     private suspend fun executeGitHubCommand(input: String): String? {
@@ -702,7 +713,7 @@ class AgentViewModel @Inject constructor(
     }
 
     // ============================================
-    // FILE COMMANDS
+    // SECTION 3.11: FILE COMMANDS
     // ============================================
 
     private fun executeFileCommand(input: String): String? {
@@ -760,7 +771,7 @@ class AgentViewModel @Inject constructor(
     }
 
     // ============================================
-    // SYSTEM COMMANDS
+    // SECTION 3.12: SYSTEM COMMANDS
     // ============================================
 
     private fun executeSystemCommand(input: String): String? {
@@ -780,12 +791,12 @@ class AgentViewModel @Inject constructor(
     }
 
     // ============================================
-    // GEMINI CHAT
+    // SECTION 3.13: GEMINI CHAT
     // ============================================
 
     private suspend fun executeGeminiChat(input: String): String {
         val key = preferences.getApiKey()
-        if (key.isNullOrBlank()) return "❌ No Gemini API key set."
+        if (key.isNullOrBlank()) return "❌ No Gemini API key set. Add it in Protocol settings."
         _state.value = _state.value.copy(executionMode = ExecutionMode.CHATTING)
         val taskType = classifyTask(input)
         val modelName = selectOptimalModel(taskType, input)
@@ -810,7 +821,7 @@ class AgentViewModel @Inject constructor(
                 errorMsg.contains("quota") || errorMsg.contains("rate") || errorMsg.contains("RESOURCE_EXHAUSTED")) {
                 applyModelCooldown(modelName)
                 if (_state.value.manualModelSelected) {
-                    "⚠️ Selected model '$modelName' is rate-limited. Please choose another model."
+                    "⚠️ Selected model '$modelName' is rate-limited. Please choose another model from the Models panel."
                 } else {
                     val fallbackModel = selectOptimalModel("high_volume", input)
                     if (fallbackModel != modelName) {
@@ -820,20 +831,20 @@ class AgentViewModel @Inject constructor(
                             val fbResponse = fb.generateContent(content { text(input) }).text ?: "No response."
                             recordModelUsage(fallbackModel)
                             resetFailureState()
-                            "🔄 (Switched to $fallbackModel)\n\n$fbResponse"
+                            "🔄 (Switched from $modelName to $fallbackModel due to rate limits)\n\n$fbResponse"
                         } catch (e2: Exception) {
                             applyModelCooldown(fallbackModel)
-                            "❌ All models temporarily unavailable."
+                            "❌ All models temporarily unavailable. Please wait 30-60 seconds and try again."
                         }
-                    } else "⚠️ Current model at capacity."
+                    } else "⚠️ Current model at capacity. Please try again shortly."
                 }
             } else "❌ Error: ${errorMsg}"
         }
     }
 
-    // ========================================================================
-    // AUTONOMOUS APP GENERATION WITH SELF-HEALING BUILD LOOP
-    // ========================================================================
+    // ============================================
+    // SECTION 3.14: AUTONOMOUS APP GENERATION WITH SELF-HEALING BUILD LOOP
+    // ============================================
 
     private suspend fun createFullApplication(
         token: String, key: String, appName: String, description: String
@@ -844,25 +855,25 @@ class AgentViewModel @Inject constructor(
             val architecture = planAppArchitecture(key, appName, description)
             if (architecture.files.isEmpty()) {
                 _state.value = _state.value.copy(isGeneratingApp = false)
-                return "❌ Architecture planning failed."
+                return "❌ Architecture planning failed. Try a more detailed description."
             }
             addProgressMessage("📋 Planned ${architecture.files.size} files - ${architecture.techStack}")
             addProgressMessage("📦 Dependencies: ${architecture.dependencies.take(5).joinToString(", ")}...")
-            
+
             addProgressMessage("📁 Phase 2/5: Creating GitHub repository...")
             val createResult = githubApiCall("POST", "https://api.github.com/user/repos", token,
                 """{"name":"$appName","private":false,"auto_init":false}""")
             if (createResult.startsWith("❌")) {
                 _state.value = _state.value.copy(isGeneratingApp = false)
-                return "❌ $createResult"
+                return "❌ Repository creation failed: $createResult"
             }
-            
+
             val userResult = githubApiCall("GET", "https://api.github.com/user", token, null)
             val owner = Regex("\"login\"\\s*:\\s*\"([^\"]+)\"").find(userResult)?.groupValues?.get(1)
                 ?: return "❌ Could not determine GitHub username."
             activeOwner = owner
             activeRepo = appName
-            
+
             addProgressMessage("⚙️ Phase 3/5: Generating ${architecture.files.size} files with context awareness...")
             val generatedFiles = generateAllFilesWithContext(key, appName, description, architecture.files, architecture)
             if (generatedFiles.isEmpty()) {
@@ -870,7 +881,7 @@ class AgentViewModel @Inject constructor(
                 return "❌ File generation failed."
             }
             addProgressMessage("📝 Generated ${generatedFiles.size} files successfully")
-            
+
             addProgressMessage("📤 Phase 4/5: Pushing files to GitHub...")
             var pushedCount = 0
             generatedFiles.forEach { (path, content) ->
@@ -882,7 +893,7 @@ class AgentViewModel @Inject constructor(
             }
             addWorkflowFile(token, owner, appName, appName)
             addProgressMessage("✅ Pushed $pushedCount/${generatedFiles.size} files")
-            
+
             addProgressMessage("🔄 Phase 5/5: Autonomous build verification with self-healing...")
             val buildResult = executeBuildLoop(token, key, owner, appName)
             _state.value = _state.value.copy(isGeneratingApp = false, executionMode = ExecutionMode.IDLE)
@@ -892,6 +903,10 @@ class AgentViewModel @Inject constructor(
             return "❌ Generation failed: ${e.message}"
         }
     }
+
+    // ============================================
+    // SECTION 3.14.1: DEEP ARCHITECTURE PLANNING
+    // ============================================
 
     private suspend fun planAppArchitecture(key: String, appName: String, description: String): AppArchitecture {
         val model = GenerativeModel("gemini-2.5-flash", key, generationConfig { temperature = 0.2f; maxOutputTokens = 60000 })
@@ -923,6 +938,10 @@ Include ALL files needed for compilation. Return ONLY valid JSON.
             )
         }
     }
+
+    // ============================================
+    // SECTION 3.14.2: CONTEXT-AWARE FILE GENERATION
+    // ============================================
 
     private suspend fun generateAllFilesWithContext(
         key: String, appName: String, description: String,
@@ -965,7 +984,7 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
     }
 
     // ============================================
-    // SELF-HEALING BUILD LOOP
+    // SECTION 3.14.3: SELF-HEALING BUILD LOOP
     // ============================================
 
     private suspend fun executeBuildLoop(
@@ -978,7 +997,7 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
         addProgressMessage("🔨 Triggering initial build...")
         val initialTrigger = triggerWorkflowAndGetRunId(token, owner, repo)
         if (initialTrigger == null) {
-            return "⚠️ Files pushed. Use 'compile repo $owner/$repo' manually."
+            return "⚠️ Files pushed but couldn't trigger build. Use 'compile repo $owner/$repo' manually."
         }
         var currentRunId: Long = initialTrigger
         while (attempt < maxAttempts) {
@@ -990,7 +1009,7 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
                     workflowRunId = currentRunId
                 )
             )
-            addProgressMessage("🔨 Build $attempt/$maxAttempts...")
+            addProgressMessage("🔨 Build attempt $attempt/$maxAttempts...")
             when (val result = waitForWorkflowCompletion(token, owner, repo, currentRunId)) {
                 is WorkflowResult.Success -> {
                     _state.value = _state.value.copy(
@@ -1001,11 +1020,15 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
                     )
                     val artifactUrl = getArtifactDownloadUrl(token, owner, repo, currentRunId)
                     return buildString {
-                        append("✅ BUILD SUCCESSFUL!\n\n")
-                        append("📱 $repo | github.com/$owner/$repo\n")
-                        append("🔄 Attempts: $attempt | 🔧 Fixes: $totalFixes\n")
+                        append("✅ APPLICATION BUILD SUCCESSFUL!\n\n")
+                        append("📱 App: $repo\n")
+                        append("📁 Repository: github.com/$owner/$repo\n")
+                        append("🔄 Build attempts: $attempt\n")
+                        append("🔧 Auto-fixes applied: $totalFixes\n")
+                        append("🔗 Build: https://github.com/$owner/$repo/actions/runs/$currentRunId\n")
                         if (artifactUrl != null) append("📥 APK: $artifactUrl\n")
                         else append("📥 APK available in GitHub Actions artifacts\n")
+                        append("\n🎉 Your app is ready!")
                     }
                 }
                 is WorkflowResult.Failure -> {
@@ -1015,9 +1038,10 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
                             errorSummary = result.error.take(500)
                         )
                     )
-                    addProgressMessage("❌ Failed. Analyzing errors...")
+                    addProgressMessage("❌ Build failed. Analyzing errors...")
                     val fixPlan = analyzeBuildError(key, result.error, result.logs)
                     if (fixPlan == null) {
+                        addProgressMessage("⚠️ Could not determine fix. Retrying build...")
                         currentRunId = retriggerBuild(token, owner, repo) ?: break
                         continue
                     }
@@ -1036,7 +1060,9 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
                                 buildStatus = BuildStatus.RETRYING
                             )
                         )
-                        addProgressMessage("✅ Fixes applied. Retrying...")
+                        addProgressMessage("✅ Fixes applied. Retrying build...")
+                    } else {
+                        addProgressMessage("⚠️ Could not apply fixes. Retrying build anyway...")
                     }
                     currentRunId = retriggerBuild(token, owner, repo) ?: break
                 }
@@ -1045,35 +1071,54 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
         _state.value = _state.value.copy(
             buildLoop = _state.value.buildLoop?.copy(buildStatus = BuildStatus.FAILED)
         )
-        return "⚠️ BUILD LOOP EXHAUSTED ($maxAttempts attempts)\n📱 $repo | github.com/$owner/$repo\n🔧 Fixes: $totalFixes\nUse 'fix file [path]: [instruction]' to manually fix."
+        return """
+⚠️ BUILD LOOP EXHAUSTED ($maxAttempts attempts)
+
+📱 App: $repo
+📁 Repository: github.com/$owner/$repo
+🔧 Auto-fixes applied: $totalFixes
+🔗 Last build: https://github.com/$owner/$repo/actions/runs/$currentRunId
+
+The app needs manual intervention. You can:
+• browse repo $owner/$repo - View project structure
+• fix file [path]: [instruction] - Manually fix files
+• compile repo $owner/$repo - Retry build
+        """.trimIndent()
     }
+
+    // ============================================
+    // SECTION 3.14.4: WORKFLOW OPERATIONS
+    // ============================================
 
     private suspend fun triggerWorkflowAndGetRunId(token: String, owner: String, repo: String): Long? {
         return withContext(Dispatchers.IO) {
             try {
-                val listBody = client.newCall(
+                val listResponse = client.newCall(
                     Request.Builder()
                         .url("https://api.github.com/repos/$owner/$repo/actions/workflows")
                         .header("Authorization", "Bearer $token")
                         .build()
-                ).execute().body?.string() ?: return@withContext null
+                ).execute()
+                val listBody = listResponse.body?.string() ?: return@withContext null
                 val workflowId = Regex("\"id\"\\s*:\\s*(\\d+)").find(listBody)?.groupValues?.get(1)
                     ?: return@withContext null
-                client.newCall(
+                val dispatchResponse = client.newCall(
                     Request.Builder()
                         .url("https://api.github.com/repos/$owner/$repo/actions/workflows/$workflowId/dispatches")
                         .header("Authorization", "Bearer $token")
                         .post("""{"ref":"main"}""".toRequestBody("application/json".toMediaType()))
                         .build()
                 ).execute()
+                if (!dispatchResponse.isSuccessful) return@withContext null
                 delay(3000)
-                val runsBody = client.newCall(
+                val runsResponse = client.newCall(
                     Request.Builder()
                         .url("https://api.github.com/repos/$owner/$repo/actions/runs?per_page=1")
                         .header("Authorization", "Bearer $token")
                         .build()
-                ).execute().body?.string()
-                Regex("\"id\"\\s*:\\s*(\\d+)").find(runsBody ?: "")?.groupValues?.get(1)?.toLong()
+                ).execute()
+                val runsBody = runsResponse.body?.string() ?: return@withContext null
+                Regex("\"id\"\\s*:\\s*(\\d+)").find(runsBody)?.groupValues?.get(1)?.toLong()
             } catch (e: Exception) { null }
         }
     }
@@ -1081,28 +1126,37 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
     private suspend fun waitForWorkflowCompletion(
         token: String, owner: String, repo: String, runId: Long
     ): WorkflowResult {
-        repeat(60) {
+        var attempts = 0
+        val maxWaitAttempts = 60
+        while (attempts < maxWaitAttempts) {
             delay(5000)
+            attempts++
             val status = withContext(Dispatchers.IO) {
                 try {
-                    val body = client.newCall(
+                    val response = client.newCall(
                         Request.Builder()
                             .url("https://api.github.com/repos/$owner/$repo/actions/runs/$runId")
                             .header("Authorization", "Bearer $token")
                             .build()
-                    ).execute().body?.string() ?: return@withContext null
-                    Pair(
-                        Regex("\"status\"\\s*:\\s*\"([^\"]+)\"").find(body)?.groupValues?.get(1),
-                        Regex("\"conclusion\"\\s*:\\s*\"([^\"]+)\"").find(body)?.groupValues?.get(1)
-                    )
+                    ).execute()
+                    if (response.isSuccessful) {
+                        val body = response.body?.string() ?: return@withContext null
+                        val conclusion = Regex("\"conclusion\"\\s*:\\s*\"([^\"]+)\"").find(body)?.groupValues?.get(1)
+                        val statusStr = Regex("\"status\"\\s*:\\s*\"([^\"]+)\"").find(body)?.groupValues?.get(1)
+                        Pair(statusStr, conclusion)
+                    } else null
                 } catch (e: Exception) { null }
             }
-            if (status?.first == "completed") {
-                return if (status.second == "success") {
-                    WorkflowResult.Success
-                } else {
-                    val logs = fetchWorkflowLogs(token, owner, repo, runId)
-                    WorkflowResult.Failure(extractKeyErrors(logs), logs)
+            if (status != null) {
+                val (statusStr, conclusion) = status
+                if (statusStr == "completed") {
+                    return if (conclusion == "success") {
+                        WorkflowResult.Success
+                    } else {
+                        val logs = fetchWorkflowLogs(token, owner, repo, runId)
+                        val error = extractKeyErrors(logs)
+                        WorkflowResult.Failure(error, logs)
+                    }
                 }
             }
         }
@@ -1112,25 +1166,31 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
     private suspend fun fetchWorkflowLogs(token: String, owner: String, repo: String, runId: Long): String {
         return withContext(Dispatchers.IO) {
             try {
-                client.newCall(
+                val response = client.newCall(
                     Request.Builder()
                         .url("https://api.github.com/repos/$owner/$repo/actions/runs/$runId/logs")
                         .header("Authorization", "Bearer $token")
                         .build()
-                ).execute().body?.string()?.take(10000) ?: ""
+                ).execute()
+                if (response.isSuccessful) {
+                    response.body?.string()?.take(10000) ?: ""
+                } else ""
             } catch (e: Exception) { "" }
         }
     }
 
     private fun extractKeyErrors(logs: String): String {
-        val patterns = listOf(
+        val errorPatterns = listOf(
             Regex("error:.*", RegexOption.IGNORE_CASE),
-            Regex("FAILURE:.*"),
-            Regex("Unresolved reference.*"),
-            Regex(".*not found.*")
+            Regex("FAILURE:.*", RegexOption.IGNORE_CASE),
+            Regex("BUILD FAILED.*", RegexOption.IGNORE_CASE),
+            Regex("Unresolved reference.*", RegexOption.IGNORE_CASE),
+            Regex(".*not found.*", RegexOption.IGNORE_CASE)
         )
         val errors = mutableListOf<String>()
-        patterns.forEach { p -> p.findAll(logs).forEach { errors.add(it.value) } }
+        for (pattern in errorPatterns) {
+            pattern.findAll(logs).forEach { errors.add(it.value) }
+        }
         return if (errors.isEmpty()) logs.take(2000) else errors.take(20).joinToString("\n")
     }
 
@@ -1158,8 +1218,11 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
         token: String, key: String, owner: String, repo: String, plan: FixPlan
     ): Boolean {
         var success = true
-        plan.fileFixes.forEach { (file, instruction) ->
-            if (repairFileInRepo(token, key, owner, repo, file, instruction).startsWith("❌")) {
+        for ((filePath, instruction) in plan.fileFixes) {
+            try {
+                val result = repairFileInRepo(token, key, owner, repo, filePath, instruction)
+                if (result.startsWith("❌")) success = false
+            } catch (e: Exception) {
                 success = false
             }
         }
@@ -1175,19 +1238,22 @@ Return JSON: {"files":[{"path":"path.kt","content":"code"}]}
     ): String? {
         return withContext(Dispatchers.IO) {
             try {
-                val body = client.newCall(
+                val response = client.newCall(
                     Request.Builder()
                         .url("https://api.github.com/repos/$owner/$repo/actions/runs/$runId/artifacts")
                         .header("Authorization", "Bearer $token")
                         .build()
-                ).execute().body?.string() ?: return@withContext null
-                Regex("\"archive_download_url\"\\s*:\\s*\"([^\"]+)\"").find(body)?.groupValues?.get(1)
+                ).execute()
+                if (response.isSuccessful) {
+                    val body = response.body?.string() ?: return@withContext null
+                    Regex("\"archive_download_url\"\\s*:\\s*\"([^\"]+)\"").find(body)?.groupValues?.get(1)
+                } else null
             } catch (e: Exception) { null }
         }
     }
 
     private suspend fun addWorkflowFile(token: String, owner: String, repo: String, appName: String) {
-        val yaml = """
+        val workflowYaml = """
 name: Build $appName
 on: [push, workflow_dispatch]
 jobs:
@@ -1203,17 +1269,15 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: {name: ${appName}-debug, path: app/build/outputs/apk/debug/app-debug.apk}
         """.trimIndent()
-        val encoded = android.util.Base64.encodeToString(yaml.toByteArray(), android.util.Base64.NO_WRAP)
-        githubApiCall(
-            "PUT",
+        val encoded = android.util.Base64.encodeToString(workflowYaml.toByteArray(), android.util.Base64.NO_WRAP)
+        githubApiCall("PUT",
             "https://api.github.com/repos/$owner/$repo/contents/.github/workflows/build.yml",
             token,
-            """{"message":"Add CI workflow","content":"$encoded"}"""
-        )
+            """{"message":"Add CI workflow","content":"$encoded"}""")
     }
 
     // ============================================
-    // CROSS-REPO FEATURE TRANSFER ENGINE
+    // SECTION 3.15: CROSS-REPO FEATURE TRANSFER ENGINE
     // ============================================
 
     private suspend fun analyzePublicRepo(
@@ -1229,15 +1293,17 @@ jobs:
                 val keyFiles = readKeyFilesForAnalysis(token, owner, repo, fileTree)
                 val analysis = analyzeRepoWithAI(key, repoInfo, keyFiles, fileTree)
                 buildString {
-                    append("📊 ANALYSIS: $owner/$repo\n\n")
+                    append("📊 REPOSITORY ANALYSIS: $owner/$repo\n\n")
                     append("📝 ${repoInfo.description}\n")
                     append("⭐ ${repoInfo.stars} | 🍴 ${repoInfo.forks} | 💻 ${repoInfo.language}\n\n")
-                    append("🏗️ ${analysis.architecture}\n\n")
-                    append("🔑 Features:\n${analysis.keyFeatures.joinToString("\n") { "  • $it" }}\n\n")
-                    append("📦 Dependencies:\n${analysis.dependencies.take(10).joinToString("\n") { "  • $it" }}\n\n")
-                    append("📁 Structure (${fileTree.size} files):\n${fileTree.take(15).joinToString("\n") { "  📄 $it" }}")
-                    if (fileTree.size > 15) append("\n  ... ${fileTree.size - 15} more")
-                    append("\n\n💡 transfer [feature] from $owner/$repo | merge repo $owner/$repo")
+                    append("🏗️ ARCHITECTURE:\n${analysis.architecture}\n\n")
+                    append("🔑 KEY FEATURES:\n${analysis.keyFeatures.joinToString("\n") { "  • $it" }}\n\n")
+                    append("📦 DEPENDENCIES:\n${analysis.dependencies.take(10).joinToString("\n") { "  • $it" }}\n\n")
+                    append("📁 STRUCTURE (${fileTree.size} files):\n${fileTree.take(15).joinToString("\n") { "  📄 $it" }}")
+                    if (fileTree.size > 15) append("\n  ... and ${fileTree.size - 15} more")
+                    append("\n\n💡 COMMANDS:\n")
+                    append("• transfer [feature] from $owner/$repo - Port specific features\n")
+                    append("• merge repo $owner/$repo - Clone entire functionality")
                 }
             } catch (e: Exception) { "❌ Analysis failed: ${e.message}" }
         }
@@ -1247,18 +1313,18 @@ jobs:
         token: String, key: String, instruction: String
     ): String {
         if (activeOwner.isBlank() || activeRepo.isBlank()) return "❌ Set active repo first."
-        addProgressMessage("🧠 Understanding transfer: $instruction")
+        addProgressMessage("🧠 Understanding feature transfer: $instruction")
         return withContext(Dispatchers.IO) {
             try {
                 val analysis = parseFeatureTransferRequest(key, instruction)
-                    ?: return@withContext "❌ Could not understand request."
+                    ?: return@withContext "❌ Could not understand the transfer request."
                 addProgressMessage("📁 Analyzing source: ${analysis.sourceOwner}/${analysis.sourceRepo}")
                 val sourceFiles = getFileTree(token, analysis.sourceOwner, analysis.sourceRepo)
                 val relevantFiles = sourceFiles.filter { p ->
                     analysis.targetFeatures.any { p.lowercase().contains(it.lowercase()) } ||
                     p.lowercase().contains(analysis.sourceRepo.lowercase())
                 }
-                addProgressMessage("📋 Found ${relevantFiles.size} relevant files. Adapting...")
+                addProgressMessage("📋 Found ${relevantFiles.size} relevant files. Adapting code...")
                 val currentFiles = getFileTree(token, activeOwner, activeRepo)
                 var created = 0
                 var modified = 0
@@ -1276,7 +1342,7 @@ jobs:
                         val encoded = android.util.Base64.encodeToString(
                             adaptedFile.toByteArray(), android.util.Base64.NO_WRAP
                         )
-                        val exists = currentFiles.any { it.equals(targetPath, true) }
+                        val exists = currentFiles.any { it.equals(targetPath, ignoreCase = true) }
                         if (exists) {
                             val sha = getFileSha(token, activeOwner, activeRepo, targetPath)
                             if (sha != null) {
@@ -1284,7 +1350,7 @@ jobs:
                                     "PUT",
                                     "https://api.github.com/repos/$activeOwner/$activeRepo/contents/$targetPath",
                                     token,
-                                    """{"message":"Transfer: ${analysis.sourceRepo} - $instruction","content":"$encoded","sha":"$sha"}"""
+                                    """{"message":"Transfer: ${analysis.sourceRepo} feature - $instruction","content":"$encoded","sha":"$sha"}"""
                                 )
                                 if (!result.startsWith("❌")) modified++
                             }
@@ -1293,13 +1359,25 @@ jobs:
                                 "PUT",
                                 "https://api.github.com/repos/$activeOwner/$activeRepo/contents/$targetPath",
                                 token,
-                                """{"message":"Added: ${analysis.sourceRepo} - $targetPath","content":"$encoded"}"""
+                                """{"message":"Added: ${analysis.sourceRepo} feature - $targetPath","content":"$encoded"}"""
                             )
                             if (!result.startsWith("❌")) created++
                         }
                     } catch (e: Exception) { continue }
                 }
-                "✅ TRANSFER COMPLETE\n📥 ${analysis.sourceOwner}/${analysis.sourceRepo}\n📤 $activeOwner/$activeRepo\n📄 Created: $created | ✏️ Modified: $modified\n• compile repo $activeOwner/$activeRepo"
+                """
+✅ FEATURE TRANSFER COMPLETE
+
+📥 Source: ${analysis.sourceOwner}/${analysis.sourceRepo}
+📤 Target: $activeOwner/$activeRepo
+📝 Instruction: $instruction
+📄 Files created: $created
+✏️ Files modified: $modified
+
+🔨 The transferred code has been adapted to fit your project structure.
+• compile repo $activeOwner/$activeRepo - Build and verify
+• browse repo $activeOwner/$activeRepo - View updated structure
+                """.trimIndent()
             } catch (e: Exception) { "❌ Transfer failed: ${e.message}" }
         }
     }
@@ -1307,32 +1385,33 @@ jobs:
     private suspend fun mergeRepositoryFeatures(
         token: String, key: String, sourceOwner: String, sourceRepo: String
     ): String {
-        addProgressMessage("🔄 Merging $sourceOwner/$sourceRepo...")
+        addProgressMessage("🔄 Full feature merge from $sourceOwner/$sourceRepo...")
         analyzePublicRepo(token, key, sourceOwner, sourceRepo)
-        return transferFeaturesFromRepo(token, key, "transfer all features from $sourceOwner/$sourceRepo")
+        return transferFeaturesFromRepo(token, key, "transfer all features and architecture patterns from $sourceOwner/$sourceRepo")
     }
 
     // ============================================
-    // GITHUB HELPERS
+    // SECTION 3.16: GITHUB REPO ANALYSIS HELPERS
     // ============================================
 
     private suspend fun getRepoInfo(token: String, owner: String, repo: String): RepoInfo {
         return withContext(Dispatchers.IO) {
             try {
-                val json = JSONObject(
-                    client.newCall(
-                        Request.Builder()
-                            .url("https://api.github.com/repos/$owner/$repo")
-                            .header("Authorization", "Bearer $token")
-                            .build()
-                    ).execute().body?.string() ?: "{}"
-                )
-                RepoInfo(
-                    json.optString("description", "No description"),
-                    json.optInt("stargazers_count", 0),
-                    json.optInt("forks_count", 0),
-                    json.optString("language", "Unknown")
-                )
+                val response = client.newCall(
+                    Request.Builder()
+                        .url("https://api.github.com/repos/$owner/$repo")
+                        .header("Authorization", "Bearer $token")
+                        .build()
+                ).execute()
+                if (response.isSuccessful) {
+                    val json = JSONObject(response.body?.string() ?: "{}")
+                    RepoInfo(
+                        json.optString("description", "No description"),
+                        json.optInt("stargazers_count", 0),
+                        json.optInt("forks_count", 0),
+                        json.optString("language", "Unknown")
+                    )
+                } else RepoInfo("Unknown", 0, 0, "Unknown")
             } catch (e: Exception) { RepoInfo("Error", 0, 0, "Unknown") }
         }
     }
@@ -1370,13 +1449,19 @@ jobs:
     ): Map<String, String> {
         val keyPatterns = listOf(
             "build.gradle", "AndroidManifest.xml", "MainActivity", "Application",
-            "ViewModel", "Repository", "Model", "Entity", "Dao", "Database"
+            "ViewModel", "Repository", "Model", "Entity", "Dao", "Database",
+            "app/src/main/java", "settings.gradle"
         )
-        val keyFiles = fileTree.filter { p -> keyPatterns.any { p.contains(it, true) } }.take(15)
+        val keyFiles = fileTree.filter { path ->
+            keyPatterns.any { pattern -> path.contains(pattern, ignoreCase = true) }
+        }.take(15)
         val contents = mutableMapOf<String, String>()
-        keyFiles.forEach { f ->
+        for (file in keyFiles) {
             try {
-                readFileContent(token, owner, repo, f)?.let { contents[f] = it.take(3000) }
+                val content = readFileContent(token, owner, repo, file)
+                if (content != null) {
+                    contents[file] = content.take(3000)
+                }
             } catch (e: Exception) { }
         }
         return contents
@@ -1387,17 +1472,19 @@ jobs:
     ): String? {
         return withContext(Dispatchers.IO) {
             try {
-                val json = JSONObject(
-                    client.newCall(
-                        Request.Builder()
-                            .url("https://api.github.com/repos/$owner/$repo/contents/$path")
-                            .header("Authorization", "Bearer $token")
-                            .build()
-                    ).execute().body?.string() ?: "{}"
-                )
-                val content = json.optString("content", "")
-                if (content.isNotBlank()) String(android.util.Base64.decode(content, android.util.Base64.DEFAULT))
-                else null
+                val response = client.newCall(
+                    Request.Builder()
+                        .url("https://api.github.com/repos/$owner/$repo/contents/$path")
+                        .header("Authorization", "Bearer $token")
+                        .build()
+                ).execute()
+                if (response.isSuccessful) {
+                    val json = JSONObject(response.body?.string() ?: "{}")
+                    val content = json.optString("content", "")
+                    if (content.isNotBlank()) {
+                        String(android.util.Base64.decode(content, android.util.Base64.DEFAULT))
+                    } else null
+                } else null
             } catch (e: Exception) { null }
         }
     }
@@ -1407,20 +1494,22 @@ jobs:
     ): String? {
         return withContext(Dispatchers.IO) {
             try {
-                JSONObject(
-                    client.newCall(
-                        Request.Builder()
-                            .url("https://api.github.com/repos/$owner/$repo/contents/$path")
-                            .header("Authorization", "Bearer $token")
-                            .build()
-                    ).execute().body?.string() ?: "{}"
-                ).optString("sha", null)
+                val response = client.newCall(
+                    Request.Builder()
+                        .url("https://api.github.com/repos/$owner/$repo/contents/$path")
+                        .header("Authorization", "Bearer $token")
+                        .build()
+                ).execute()
+                if (response.isSuccessful) {
+                    val json = JSONObject(response.body?.string() ?: "{}")
+                    json.optString("sha", null)
+                } else null
             } catch (e: Exception) { null }
         }
     }
 
     // ============================================
-    // AI ANALYSIS HELPERS
+    // SECTION 3.17: AI-POWERED REPO ANALYSIS & TRANSFER
     // ============================================
 
     private suspend fun analyzeRepoWithAI(
@@ -1430,25 +1519,46 @@ jobs:
             "gemini-2.5-flash", key,
             generationConfig { temperature = 0.2f; maxOutputTokens = 60000 }
         )
-        val filesSummary = keyFiles.entries.joinToString("\n") { (p, c) ->
-            "FILE: $p\n```\n${c.take(1500)}\n```\n"
+        val filesSummary = keyFiles.entries.joinToString("\n") { (path, content) ->
+            "FILE: $path\n```\n${content.take(1500)}\n```\n"
         }
+        val prompt = """
+Analyze this Android repository deeply.
+
+REPO: ${repoInfo.description}
+LANGUAGE: ${repoInfo.language}
+
+FILE STRUCTURE (${fileTree.size} files):
+${fileTree.take(30).joinToString("\n") { "  📄 $it" }}
+
+KEY FILES CONTENT:
+$filesSummary
+
+Return a JSON analysis:
+{
+  "architecture": "MVVM with Clean Architecture, using Room for data...",
+  "keyFeatures": ["Feature 1", "Feature 2", ...],
+  "dependencies": ["dep1", "dep2", ...],
+  "coreLogic": {"file/path.kt": "brief description of what this file does"}
+}
+        """.trimIndent()
         return try {
-            val response = model.generateContent(
-                content {
-                    text("Analyze this Android repo.\nREPO: ${repoInfo.description}\nFILES (${fileTree.size}):\n${fileTree.take(30).joinToString("\n")}\nKEY FILES:\n$filesSummary\nReturn JSON: {\"architecture\":\"...\",\"keyFeatures\":[\"...\"],\"dependencies\":[\"...\"],\"coreLogic\":{\"file.kt\":\"desc\"}}")
-                }
-            ).text ?: RepoAnalysis("Unknown", emptyList(), emptyMap(), emptyList(), emptyMap())
+            val response = model.generateContent(content { text(prompt) }).text
+                ?: return RepoAnalysis("Unknown", emptyList(), emptyMap(), emptyList(), emptyMap())
             recordModelUsage("gemini-2.5-flash")
-           val startIdx = response.indexOf("{")
-val endIdx = response.lastIndexOf("}")
-val jsonStr = if (startIdx >= 0 && endIdx > startIdx) response.substring(startIdx, endIdx + 1) else "{}"
-val obj = JSONObject(jsonStr)
+            val jsonStr = response.substringAfter("{").substringBeforeLast("}").let { "{$it}" }
+            val obj = JSONObject(jsonStr)
+            val features = (0 until obj.getJSONArray("keyFeatures").length()).map {
+                obj.getJSONArray("keyFeatures").getString(it)
+            }
+            val deps = (0 until obj.getJSONArray("dependencies").length()).map {
+                obj.getJSONArray("dependencies").getString(it)
+            }
             RepoAnalysis(
                 obj.optString("architecture", ""),
-                (0 until obj.getJSONArray("keyFeatures").length()).map { obj.getJSONArray("keyFeatures").getString(it) },
-                fileTree.associateWith { "File" },
-                (0 until obj.getJSONArray("dependencies").length()).map { obj.getJSONArray("dependencies").getString(it) },
+                features,
+                fileTree.associateWith { "File in repository" },
+                deps,
                 emptyMap()
             )
         } catch (e: Exception) {
@@ -1463,19 +1573,36 @@ val obj = JSONObject(jsonStr)
             "gemini-3.1-flash-lite", key,
             generationConfig { temperature = 0.1f; maxOutputTokens = 60000 }
         )
+        val prompt = """
+Parse this feature transfer instruction and extract details.
+
+Instruction: "$instruction"
+
+The instruction mentions copying/transferring features from a GitHub repository.
+Current active repo: $activeOwner/$activeRepo
+
+Return JSON:
+{
+  "sourceOwner": "owner",
+  "sourceRepo": "repo",
+  "targetFeatures": ["feature1", "feature2"],
+  "additionalContext": "any extra details"
+}
+
+If no source repo is mentioned, use common sense to identify it from the instruction.
+        """.trimIndent()
         return try {
-            val response = model.generateContent(
-                content {
-                    text("Parse: \"$instruction\"\nActive: $activeOwner/$activeRepo\nReturn JSON: {\"sourceOwner\":\"...\",\"sourceRepo\":\"...\",\"targetFeatures\":[\"...\"],\"additionalContext\":\"...\"}")
-                }
-            ).text ?: return null
+            val response = model.generateContent(content { text(prompt) }).text ?: return null
             recordModelUsage("gemini-3.1-flash-lite")
-            val obj = JSONObject(response.substringAfter("{").substringBeforeLast("}").let { "{$it}" })
+            val jsonStr = response.substringAfter("{").substringBeforeLast("}").let { "{$it}" }
+            val obj = JSONObject(jsonStr)
             FeatureTransferRequest(
-                obj.optString("sourceOwner"),
-                obj.optString("sourceRepo"),
-                (0 until obj.getJSONArray("targetFeatures").length()).map { obj.getJSONArray("targetFeatures").getString(it) },
-                obj.optString("additionalContext")
+                obj.optString("sourceOwner", ""),
+                obj.optString("sourceRepo", ""),
+                (0 until obj.getJSONArray("targetFeatures").length()).map {
+                    obj.getJSONArray("targetFeatures").getString(it)
+                },
+                obj.optString("additionalContext", "")
             )
         } catch (e: Exception) { null }
     }
@@ -1489,12 +1616,36 @@ val obj = JSONObject(jsonStr)
             "gemini-2.5-flash", key,
             generationConfig { temperature = 0.15f; maxOutputTokens = 60000 }
         )
+        val prompt = """
+Adapt this source code from a different project to fit my project.
+
+SOURCE REPO: $sourceOwner/$sourceRepo
+TARGET REPO: $targetOwner/$targetRepo
+ORIGINAL FILE PATH: $sourcePath
+TRANSFER INSTRUCTION: $instruction
+
+CURRENT FILES IN TARGET:
+${currentTargetFiles.take(20).joinToString("\n") { "  📄 $it" }}
+
+SOURCE CODE:
+```
+
+$sourceContent
+
+```
+
+Adapt this code to:
+1. Work in the target project context
+2. Use appropriate package names for the target
+3. Remove any dependencies on source-specific code
+4. Keep the core logic/algorithm intact
+5. Add proper imports and annotations
+6. Make it compile-ready
+
+Return ONLY the complete adapted file content. No explanations.
+        """.trimIndent()
         return try {
-            val response = model.generateContent(
-                content {
-                    text("Adapt code.\nSOURCE: $sourceOwner/$sourceRepo\nTARGET: $targetOwner/$targetRepo\nPATH: $sourcePath\nINSTRUCTION: $instruction\nTARGET FILES:\n${currentTargetFiles.take(20).joinToString("\n")}\nSOURCE CODE:\n```\n$sourceContent\n```\nReturn ONLY adapted code.")
-                }
-            ).text
+            val response = model.generateContent(content { text(prompt) }).text
             recordModelUsage("gemini-2.5-flash")
             response
         } catch (e: Exception) { null }
@@ -1517,7 +1668,7 @@ val obj = JSONObject(jsonStr)
     }
 
     // ============================================
-    // GITHUB API OPERATIONS
+    // SECTION 3.18: GITHUB API OPERATIONS
     // ============================================
 
     private suspend fun githubApiCall(
@@ -1544,14 +1695,15 @@ val obj = JSONObject(jsonStr)
                     }
                     method == "GET" && url.contains("/user/repos") && !url.contains("/contents") -> {
                         val repos = JSONArray(responseBody)
-                        if (repos.length() == 0) "📁 No repos."
-                        else "📁 Repos:\n" + (0 until minOf(repos.length(), 10)).joinToString("\n") { i ->
-                            "• ${repos.getJSONObject(i).getString("full_name")}"
+                        if (repos.length() == 0) "📁 No repositories found."
+                        else "📁 Your Repositories:\n" + (0 until minOf(repos.length(), 10)).joinToString("\n") { i ->
+                            val repo = repos.getJSONObject(i)
+                            "• ${repo.getString("full_name")} ${if (repo.getBoolean("private")) "🔒" else "🌐"} - ${repo.optString("description", "No description")}"
                         }
                     }
                     else -> responseBody
                 }
-            } else "❌ GitHub API error: ${response.code}"
+            } else "❌ GitHub API error: ${response.code} - ${response.message}"
         } catch (e: Exception) { "❌ Network error: ${e.message}" }
     }
 
@@ -1559,21 +1711,23 @@ val obj = JSONObject(jsonStr)
         token: String, owner: String, repo: String
     ): String = withContext(Dispatchers.IO) {
         try {
-            val listBody = client.newCall(
-                Request.Builder()
-                    .url("https://api.github.com/repos/$owner/$repo/actions/workflows")
-                    .header("Authorization", "Bearer $token")
-                    .build()
-            ).execute().body?.string() ?: ""
-            val workflowId = Regex("\"id\"\\s*:\\s*(\\d+)").find(listBody)?.groupValues?.get(1)
-                ?: return@withContext "❌ No workflows found."
-            if (client.newCall(
+            val listResponse = client.newCall(
+                Request.Builder().url("https://api.github.com/repos/$owner/$repo/actions/workflows")
+                     .header("Authorization", "Bearer $token").build()
+            ).execute()
+            val listBody = listResponse.body?.string() ?: ""
+            val workflowId = Regex("\"id\"\\s*:\\s*(\\d+)\\s*,\\s*\"name\"\\s*:\\s*\"([^\"]+)\"")
+                .find(listBody)?.groupValues?.get(1)
+            if (workflowId == null) return@withContext "❌ No workflows found in $owner/$repo. Add a .github/workflows file first."
+            val dispatchResponse = client.newCall(
                 Request.Builder()
                     .url("https://api.github.com/repos/$owner/$repo/actions/workflows/$workflowId/dispatches")
                     .header("Authorization", "Bearer $token")
                     .post("""{"ref":"main"}""".toRequestBody("application/json".toMediaType()))
                     .build()
-            ).execute().isSuccessful) "🚀 Build triggered!" else "⚠️ Build trigger failed"
+            ).execute()
+            if (dispatchResponse.isSuccessful) "🚀 Build triggered for $owner/$repo! Check the Actions tab."
+            else "⚠️ Build trigger failed: ${dispatchResponse.message}"
         } catch (e: Exception) { "❌ Error: ${e.message}" }
     }
 
@@ -1581,18 +1735,44 @@ val obj = JSONObject(jsonStr)
         token: String, owner: String, repo: String
     ): String = withContext(Dispatchers.IO) {
         try {
-            val response = client.newCall(
-                Request.Builder()
-                    .url("https://api.github.com/repos/$owner/$repo/git/trees/main?recursive=1")
-                    .header("Authorization", "Bearer $token")
-                    .build()
+            val repoResponse = client.newCall(
+                Request.Builder().url("https://api.github.com/repos/$owner/$repo")
+                    .header("Authorization", "Bearer $token").build()
             ).execute()
-            if (!response.isSuccessful) return@withContext "❌ Not found."
-            val tree = JSONObject(response.body?.string() ?: "{}").optJSONArray("tree")
-                ?: return@withContext "📁 Empty."
-            val files = (0 until minOf(tree.length(), 100)).map { tree.getJSONObject(it).getString("path") }
-            "📁 $owner/$repo (${tree.length()} items):\n" + files.take(50).joinToString("\n") { "  📄 $it" } +
-                if (files.size > 50) "\n  ... more" else ""
+            if (!repoResponse.isSuccessful) return@withContext "❌ Repository not found: $owner/$repo"
+            val repoJson = JSONObject(repoResponse.body?.string() ?: "{}")
+            val description = repoJson.optString("description", "No description")
+            val stars = repoJson.optInt("stargazers_count", 0)
+            val language = repoJson.optString("language", "Unknown")
+            val defaultBranch = repoJson.optString("default_branch", "main")
+            val treeResponse = client.newCall(
+                Request.Builder()
+                    .url("https://api.github.com/repos/$owner/$repo/git/trees/$defaultBranch?recursive=1")
+                    .header("Authorization", "Bearer $token").build()
+            ).execute()
+            val treeJson = JSONObject(treeResponse.body?.string() ?: "{}")
+            val tree = treeJson.optJSONArray("tree")
+            val directories = mutableSetOf<String>()
+            val files = mutableListOf<String>()
+            if (tree != null) {
+                for (i in 0 until minOf(tree.length(), 150)) {
+                    val item = tree.getJSONObject(i)
+                    if (item.getString("type") == "tree") directories.add(item.getString("path"))
+                    else files.add(item.getString("path"))
+                }
+            }
+            buildString {
+                append("📁 $owner/$repo\n")
+                append("📝 $description\n")
+                append("⭐ $stars | 💻 $language | 🌿 $defaultBranch\n")
+                append("\n📂 Directories (${directories.size}):\n")
+                append(directories.take(15).joinToString("\n") { "  📁 $it" })
+                if (directories.size > 15) append("\n  ... and ${directories.size - 15} more")
+                append("\n\n📄 Files (${files.size} shown):\n")
+                append(files.take(25).joinToString("\n") { "  📄 $it" })
+                if (files.size > 25) append("\n  ... and ${files.size - 25} more")
+                if (tree != null && tree.length() > 150) append("\n\n⚠️ Showing 150 of ${tree.length()} items.")
+            }
         } catch (e: Exception) { "❌ Error: ${e.message}" }
     }
 
@@ -1600,19 +1780,18 @@ val obj = JSONObject(jsonStr)
         token: String, owner: String, repo: String, path: String
     ): String = withContext(Dispatchers.IO) {
         try {
-            val json = JSONObject(
-                client.newCall(
-                    Request.Builder()
-                        .url("https://api.github.com/repos/$owner/$repo/contents/$path")
-                        .header("Authorization", "Bearer $token")
-                        .build()
-                ).execute().body?.string() ?: "{}"
-            )
+            val response = client.newCall(
+                Request.Builder().url("https://api.github.com/repos/$owner/$repo/contents/$path")
+                    .header("Authorization", "Bearer $token").build()
+            ).execute()
+            if (!response.isSuccessful) return@withContext "❌ File not found: $path"
+            val json = JSONObject(response.body?.string() ?: "{}")
             val content = json.optString("content", "")
-            if (content.isBlank()) return@withContext "📄 Empty"
+            if (content.isBlank()) return@withContext "📄 $path - Empty file"
             val decoded = String(android.util.Base64.decode(content, android.util.Base64.DEFAULT))
-            if (decoded.length > 3000) "📄 $path (${decoded.length} chars):\n\n${decoded.take(3000)}\n\n..."
-            else "📄 $path:\n\n$decoded"
+            if (decoded.length > 3000) {
+                "📄 $owner/$repo/$path (${decoded.length} chars):\n\n${decoded.take(3000)}\n\n... (${decoded.length - 3000} more characters)"
+            } else "📄 $owner/$repo/$path (${decoded.length} chars):\n\n$decoded"
         } catch (e: Exception) { "❌ Error: ${e.message}" }
     }
 
@@ -1620,32 +1799,42 @@ val obj = JSONObject(jsonStr)
         token: String, key: String, owner: String, repo: String, path: String, instruction: String
     ): String = withContext(Dispatchers.IO) {
         try {
-            val readJson = JSONObject(
-                client.newCall(
-                    Request.Builder()
-                        .url("https://api.github.com/repos/$owner/$repo/contents/$path")
-                        .header("Authorization", "Bearer $token")
-                        .build()
-                ).execute().body?.string() ?: "{}"
-            )
-            val currentContent = String(android.util.Base64.decode(readJson.getString("content"), android.util.Base64.DEFAULT))
-            val sha = readJson.getString("sha")
-            val model = GenerativeModel(
-                selectOptimalModel("debug", "fix $path"), key,
-                generationConfig { temperature = 0.1f; maxOutputTokens = 60000 }
-            )
-            val newContent = model.generateContent(
-                content { text("Fix file.\nCURRENT:\n```\n$currentContent\n```\nINSTRUCTION: $instruction\nReturn ONLY fixed code.") }
-            ).text ?: return@withContext "❌ Empty"
-            recordModelUsage(model.modelName)
+            val readResponse = client.newCall(
+                Request.Builder().url("https://api.github.com/repos/$owner/$repo/contents/$path")
+                    .header("Authorization", "Bearer $token").build()
+            ).execute()
+            if (!readResponse.isSuccessful) return@withContext "❌ File not found: $path"
+            val json = JSONObject(readResponse.body?.string() ?: "{}")
+            val currentContent = String(android.util.Base64.decode(json.getString("content"), android.util.Base64.DEFAULT))
+            val sha = json.getString("sha")
+            val modelName = selectOptimalModel("debug", "fix $path")
+            val model = GenerativeModel(modelName, key, generationConfig { temperature = 0.1f; maxOutputTokens = 60000 })
+            val fixPrompt = """
+Fix the following file according to the instruction.
+
+CURRENT FILE CONTENT:
+```
+
+$currentContent
+
+```
+
+INSTRUCTION: $instruction
+
+Return ONLY the complete corrected file content. No explanations.
+            """.trimIndent()
+            val newContent = model.generateContent(content { text(fixPrompt) }).text
+                ?: return@withContext "❌ Gemini returned empty response."
+            recordModelUsage(modelName)
             val encoded = android.util.Base64.encodeToString(newContent.toByteArray(), android.util.Base64.NO_WRAP)
-            if (client.newCall(
-                Request.Builder()
-                    .url("https://api.github.com/repos/$owner/$repo/contents/$path")
+            val updateResponse = client.newCall(
+                Request.Builder().url("https://api.github.com/repos/$owner/$repo/contents/$path")
                     .header("Authorization", "Bearer $token")
                     .put("""{"message":"Fix: $instruction","content":"$encoded","sha":"$sha"}""".toRequestBody("application/json".toMediaType()))
                     .build()
-            ).execute().isSuccessful) "✅ Fixed $path" else "❌ Update failed"
+            ).execute()
+            if (updateResponse.isSuccessful) "✅ Fixed $path: $instruction"
+            else "❌ Update failed: ${updateResponse.message}"
         } catch (e: Exception) { "❌ Error: ${e.message}" }
     }
 
@@ -1653,27 +1842,26 @@ val obj = JSONObject(jsonStr)
         token: String, key: String, owner: String, repo: String, path: String, description: String
     ): String = withContext(Dispatchers.IO) {
         try {
-            val model = GenerativeModel(
-                selectOptimalModel("code_gen", "create $path"), key,
-                generationConfig { temperature = 0.2f; maxOutputTokens = 60000 }
-            )
+            val modelName = selectOptimalModel("code_gen", "create file $path")
+            val model = GenerativeModel(modelName, key, generationConfig { temperature = 0.2f; maxOutputTokens = 60000 })
             val content = model.generateContent(
-                content { text("Create: $path. Description: $description. Return ONLY file content.") }
-            ).text ?: return@withContext "❌ Empty"
-            recordModelUsage(model.modelName)
+                content { text("Create a complete file for path: $path. Description: $description. Return ONLY the file content.") }
+            ).text ?: return@withContext "❌ Gemini returned empty."
+            recordModelUsage(modelName)
             val encoded = android.util.Base64.encodeToString(content.toByteArray(), android.util.Base64.NO_WRAP)
-            if (client.newCall(
-                Request.Builder()
-                    .url("https://api.github.com/repos/$owner/$repo/contents/$path")
+            val response = client.newCall(
+                Request.Builder().url("https://api.github.com/repos/$owner/$repo/contents/$path")
                     .header("Authorization", "Bearer $token")
-                    .put("""{"message":"Add $path","content":"$encoded"}""".toRequestBody("application/json".toMediaType()))
+                    .put("""{"message":"Add $path: $description","content":"$encoded"}""".toRequestBody("application/json".toMediaType()))
                     .build()
-            ).execute().isSuccessful) "✅ Created $path" else "❌ Failed"
+            ).execute()
+            if (response.isSuccessful) "✅ Created $path"
+            else "❌ Creation failed: ${response.message}"
         } catch (e: Exception) { "❌ Error: ${e.message}" }
     }
 
     // ============================================
-    // ACCESSIBILITY HELPERS
+    // SECTION 3.19: ACCESSIBILITY SERVICE HELPERS
     // ============================================
 
     private fun performTapOnText(service: AuraAccessibilityService, text: String): Boolean {
@@ -1713,16 +1901,16 @@ val obj = JSONObject(jsonStr)
     }
 
     private fun performScroll(service: AuraAccessibilityService, up: Boolean) {
-        val d = service.resources.displayMetrics
+        val display = service.resources.displayMetrics
         val path = if (up) {
             android.graphics.Path().apply {
-                moveTo(d.widthPixels / 2f, d.heightPixels * 0.3f)
-                lineTo(d.widthPixels / 2f, d.heightPixels * 0.8f)
+                moveTo(display.widthPixels / 2f, display.heightPixels * 0.3f)
+                lineTo(display.widthPixels / 2f, display.heightPixels * 0.8f)
             }
         } else {
             android.graphics.Path().apply {
-                moveTo(d.widthPixels / 2f, d.heightPixels * 0.8f)
-                lineTo(d.widthPixels / 2f, d.heightPixels * 0.3f)
+                moveTo(display.widthPixels / 2f, display.heightPixels * 0.8f)
+                lineTo(display.widthPixels / 2f, display.heightPixels * 0.3f)
             }
         }
         val gesture = android.accessibilityservice.GestureDescription.Builder()
@@ -1732,16 +1920,16 @@ val obj = JSONObject(jsonStr)
     }
 
     private fun performSwipe(service: AuraAccessibilityService, right: Boolean) {
-        val d = service.resources.displayMetrics
+        val display = service.resources.displayMetrics
         val path = if (right) {
             android.graphics.Path().apply {
-                moveTo(d.widthPixels * 0.2f, d.heightPixels / 2f)
-                lineTo(d.widthPixels * 0.8f, d.heightPixels / 2f)
+                moveTo(display.widthPixels * 0.2f, display.heightPixels / 2f)
+                lineTo(display.widthPixels * 0.8f, display.heightPixels / 2f)
             }
         } else {
             android.graphics.Path().apply {
-                moveTo(d.widthPixels * 0.8f, d.heightPixels / 2f)
-                lineTo(d.widthPixels * 0.2f, d.heightPixels / 2f)
+                moveTo(display.widthPixels * 0.8f, display.heightPixels / 2f)
+                lineTo(display.widthPixels * 0.2f, display.heightPixels / 2f)
             }
         }
         val gesture = android.accessibilityservice.GestureDescription.Builder()
@@ -1753,8 +1941,8 @@ val obj = JSONObject(jsonStr)
     private fun findAccessibilityNode(
         node: android.view.accessibility.AccessibilityNodeInfo, text: String
     ): android.view.accessibility.AccessibilityNodeInfo? {
-        if (node.text?.contains(text, true) == true ||
-            node.contentDescription?.contains(text, true) == true) {
+        if (node.text?.contains(text, ignoreCase = true) == true ||
+            node.contentDescription?.contains(text, ignoreCase = true) == true) {
             return node
         }
         for (i in 0 until node.childCount) {
@@ -1766,7 +1954,7 @@ val obj = JSONObject(jsonStr)
     }
 
     // ============================================
-    // UTILITY FUNCTIONS
+    // SECTION 3.20: UTILITY FUNCTIONS
     // ============================================
 
     private fun resolveAppPackage(name: String): String? = when (name.lowercase()) {
@@ -1779,42 +1967,70 @@ val obj = JSONObject(jsonStr)
         "gmail" -> "com.google.android.gm"
         "maps" -> "com.google.android.apps.maps"
         "play store" -> "com.android.vending"
+        "calculator" -> "com.android.calculator2"
+        "calendar" -> "com.android.calendar"
+        "clock" -> "com.android.deskclock"
+        "files" -> "com.android.documentsui"
+        "phone" -> "com.android.dialer"
+        "messages" -> "com.google.android.apps.messaging"
+        "instagram" -> "com.instagram.android"
+        "facebook" -> "com.facebook.katana"
+        "twitter", "x" -> "com.twitter.android"
+        "spotify" -> "com.spotify.music"
+        "netflix" -> "com.netflix.mediaclient"
+        "telegram" -> "org.telegram.messenger"
+        "chatgpt" -> "com.openai.chatgpt"
+        "notes" -> "com.google.android.apps.docs"
+        "linkedin" -> "com.linkedin.android"
+        "reddit" -> "com.reddit.frontpage"
+        "discord" -> "com.discord"
+        "snapchat" -> "com.snapchat.android"
+        "tiktok" -> "com.zhiliaoapp.musically"
+        "pinterest" -> "com.pinterest"
+        "amazon" -> "com.amazon.mShop.android.shopping"
+        "uber" -> "com.ubercab"
+        "zomato" -> "com.application.zomato"
+        "swiggy" -> "in.swiggy.android"
         else -> null
     }
 
     private fun getRamUsage(): String {
-        val am = com.aura.ai.AuraApplication.instance
+        val activityManager = com.aura.ai.AuraApplication.instance
             .getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val mi = ActivityManager.MemoryInfo()
-        am.getMemoryInfo(mi)
-        return "${(mi.totalMem - mi.availMem) / (1024 * 1024 * 1024)}GB / ${mi.totalMem / (1024 * 1024 * 1024)}GB"
+        val memoryInfo = ActivityManager.MemoryInfo()
+        activityManager.getMemoryInfo(memoryInfo)
+        val usedGB = (memoryInfo.totalMem - memoryInfo.availMem) / (1024 * 1024 * 1024)
+        val totalGB = memoryInfo.totalMem / (1024 * 1024 * 1024)
+        return "${usedGB}GB used / ${totalGB}GB total"
     }
 
     private fun getStorageInfo(): String {
         val stat = StatFs(Environment.getDataDirectory().path)
-        val free = stat.availableBlocksLong * stat.blockSizeLong / (1024 * 1024 * 1024)
-        val total = stat.blockCountLong * stat.blockSizeLong / (1024 * 1024 * 1024)
-        return "${free}GB free / ${total}GB total"
+        val availableGB = stat.availableBlocksLong * stat.blockSizeLong / (1024 * 1024 * 1024)
+        val totalGB = stat.blockCountLong * stat.blockSizeLong / (1024 * 1024 * 1024)
+        return "${availableGB}GB free / ${totalGB}GB total"
     }
 
-    private fun getBatteryLevel(): String = try {
-        val bm = com.aura.ai.AuraApplication.instance
-            .getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-        "${bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)}%"
-    } catch (e: Exception) { "Unknown" }
+    private fun getBatteryLevel(): String {
+        return try {
+            val batteryManager = com.aura.ai.AuraApplication.instance
+                .getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+            "${batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)}%"
+        } catch (e: Exception) { "Unknown" }
+    }
 
-    private fun recursiveFileSearch(
-        dir: File, query: String, results: MutableList<String>, depth: Int
-    ) {
+    private fun recursiveFileSearch(dir: File, query: String, results: MutableList<String>, depth: Int) {
         if (depth < 0 || results.size >= 50) return
         try {
             dir.listFiles()?.forEach { file ->
-                if (file.name.contains(query, true)) results.add(file.absolutePath)
+                if (file.name.contains(query, ignoreCase = true)) {
+                    results.add(file.absolutePath)
+                }
                 if (file.isDirectory && results.size < 50) {
                     recursiveFileSearch(file, query, results, depth - 1)
                 }
             }
-        } catch (e: Exception) { }
+        } catch (e: Exception) { /* Skip inaccessible directories */ }
     }
 
     private fun formatFileSize(bytes: Long): String = when {
@@ -1824,24 +2040,29 @@ val obj = JSONObject(jsonStr)
         else -> "${bytes / (1024 * 1024 * 1024)} GB"
     }
 
-    private suspend fun generateProjectFileList(
-        key: String, appName: String, description: String
-    ): List<String> {
-        val model = GenerativeModel(
-            selectOptimalModel("code_gen", appName), key,
-            generationConfig { temperature = 0.15f; maxOutputTokens = 60000 }
-        )
+    private suspend fun generateProjectFileList(key: String, appName: String, description: String): List<String> {
+        val modelName = selectOptimalModel("code_gen", "create app $appName")
+        val model = GenerativeModel(modelName, key, generationConfig { temperature = 0.15f; maxOutputTokens = 60000 })
+        val complexity = if (description.length > 300) "60-120" else "20-40"
+        val prompt = """
+Generate a COMPLETE file list for a new project: "$appName".
+Description: $description
+
+Requirements:
+- Include ALL files needed for a compilable, production-ready project
+- Include build configuration, source code, resources, tests, documentation
+- Include CI/CD workflow files
+- Generate $complexity files based on the project complexity
+
+Return ONLY a valid JSON array of file paths.
+Example: ["build.gradle.kts", "app/build.gradle.kts", "app/src/main/AndroidManifest.xml", ...]
+        """.trimIndent()
         return try {
-            val response = model.generateContent(
-                content { text("Generate file list for: $appName - $description. Return JSON array.") }
-            ).text ?: return emptyList()
-            recordModelUsage(model.modelName)
+            val response = model.generateContent(content { text(prompt) }).text ?: return emptyList()
+            recordModelUsage(modelName)
             val jsonStr = response.substringAfter("[").substringBeforeLast("]").let { "[$it]" }
-            val jsonArray = JSONArray(jsonStr)
-            (0 until jsonArray.length()).map { jsonArray.getString(it) }
-        } catch (e: Exception) {
-            emptyList()
-        }
+            val arr = JSONArray(jsonStr)
+            (0 until arr.length()).map { arr.getString(it) }
+        } catch (e: Exception) { emptyList() }
     }
 }
-              
