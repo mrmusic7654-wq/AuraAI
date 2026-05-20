@@ -604,58 +604,7 @@ class AgentViewModel @Inject constructor(
         }
     }
 
-    // ============================================
-    // SECTION 3.10: GITHUB COMMANDS
-    // ============================================
-
-    private suspend fun executeGitHubCommand(input: String): String? {
-        val token = preferences.getGitHubToken()
-        if (token.isNullOrBlank()) return null
-        val apiKey = preferences.getApiKey()
-        if (apiKey.isNullOrBlank() && input.lowercase().contains("create app")) {
-            return "❌ No Gemini API key set. Add it in Protocol settings."
-        }
-        val key = apiKey ?: ""
-        val lower = input.lowercase().trim()
-        _state.value = _state.value.copy(executionMode = ExecutionMode.GITHUB_OPERATION)
-
-        return when {
-            (lower.startsWith("create app") || lower.startsWith("build app") || lower.startsWith("make app")) && !lower.contains("repo") -> {
-                val appDesc = input.replace(Regex("(?i)(create|build|make) app"), "").trim()
-                val appName = appDesc.split(" ").firstOrNull()?.replace(" ", "-")?.take(50) ?: "MyApp"
-                val description = if (appDesc.split(" ").size > 1) appDesc.substringAfter(" ").trim() else "A simple application"
-                _state.value = _state.value.copy(executionMode = ExecutionMode.GENERATING_APP)
-                createFullApplication(token, key, appName, description)
-            }
-            lower.contains("create") && lower.contains("repo") -> {
-                val name = input.replace(Regex("(?i)(create|a|repo|repository|github)"), "").trim().replace(" ", "-").take(50)
-                if (name.isBlank()) "❌ Please specify a repository name."
-                else githubApiCall("POST", "https://api.github.com/user/repos", token, """{"name":"$name","private":false,"auto_init":true}""")
-            }
-            lower.contains("list") && lower.contains("repo") -> {
-                githubApiCall("GET", "https://api.github.com/user/repos?per_page=10&sort=updated", token, null)
-            }
-            lower.startsWith("compile ") || lower.startsWith("build ") -> {
-                val repo = lower.removePrefix("compile ").removePrefix("build ").trim()
-                val parts = repo.split("/")
-                if (parts.size != 2) "❌ Format: compile repo owner/repo"
-                else triggerWorkflowDispatch(token, parts[0], parts[1])
-            }
-            (lower.startsWith("browse repo ") || lower.startsWith("explore repo ")) -> {
-                val repo = lower.removePrefix("browse repo ").removePrefix("explore repo ").trim()
-                val parts = repo.split("/")
-                if (parts.size != 2) "❌ Format: browse repo owner/repo"
-                else browseRepositoryContents(token, parts[0], parts[1])
-            }
-            lower.startsWith("read repo file ") -> {
-                val parts = input.replace(Regex("(?i)read repo file "), "").trim().split(" ")
-                if (parts.size < 2) "❌ Format: read repo file owner/repo path"
-                else {
-                    val repoParts = parts[0].split("/")
-                    if (repoParts.size != 2) "❌ Format: read repo file owner/repo path"
-                    else readRepoFileContents(token, repoParts[0], repoParts[1], parts.drop(1).joinToString(" "))
-                }
-             // ============================================
+// ============================================
 // SECTION 3.10: GITHUB COMMANDS
 // ============================================
 
