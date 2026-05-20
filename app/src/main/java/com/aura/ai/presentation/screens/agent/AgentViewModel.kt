@@ -1440,8 +1440,10 @@ jobs:
                 }
             ).text ?: RepoAnalysis("Unknown", emptyList(), emptyMap(), emptyList(), emptyMap())
             recordModelUsage("gemini-2.5-flash")
-           val jsonStr = response.substringAfter("{").substringBeforeLast("}")
-           val obj = JSONObject("{" + jsonStr + "}")
+           val startIdx = response.indexOf("{")
+val endIdx = response.lastIndexOf("}")
+val jsonStr = if (startIdx >= 0 && endIdx > startIdx) response.substring(startIdx, endIdx + 1) else "{}"
+val obj = JSONObject(jsonStr)
             RepoAnalysis(
                 obj.optString("architecture", ""),
                 (0 until obj.getJSONArray("keyFeatures").length()).map { obj.getJSONArray("keyFeatures").getString(it) },
