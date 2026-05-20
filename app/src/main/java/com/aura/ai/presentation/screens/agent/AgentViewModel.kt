@@ -109,6 +109,31 @@ class AgentViewModel @Inject constructor(private val preferences: AuraPreference
             model.generateContent(content { text(input) }).text ?: "No response"
         } catch (e: Exception) { "Error: ${e.message}" }
     }
+    fun selectModel(modelName: String) {
+    _state.value = _state.value.copy(activeModel = modelName, manualModelSelected = true, showModelDashboard = false)
+}
+
+fun createNewSession() {
+    viewModelScope.launch {
+        val session = SessionEntity(id = UUID.randomUUID().toString(), title = "New Session", selectedModel = _state.value.activeModel)
+        sessionDb.sessionDao().insertSession(session)
+        switchSession(session.id)
+    }
+}
+
+fun switchSession(sessionId: String) {
+    viewModelScope.launch {
+        val session = sessionDb.sessionDao().getSession(sessionId) ?: return@launch
+        _currentSessionId.value = sessionId
+        _state.value = _state.value.copy(activeModel = session.selectedModel)
+    }
+}
+
+fun deleteSession(sessionId: String) {
+    viewModelScope.launch {
+        sessionDb.sessionDao().deleteSession(sessionId)
+    }
+}
 
     private fun resolveAppPackage(name: String): String? = when (name.lowercase()) {
         "whatsapp" -> "com.whatsapp"; "youtube" -> "com.google.android.youtube"; "chrome" -> "com.android.chrome"; "settings" -> "com.android.settings"; else -> null
