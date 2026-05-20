@@ -655,62 +655,121 @@ class AgentViewModel @Inject constructor(
                     if (repoParts.size != 2) "❌ Format: read repo file owner/repo path"
                     else readRepoFileContents(token, repoParts[0], repoParts[1], parts.drop(1).joinToString(" "))
                 }
-            }
-            lower.startsWith("fix ") || lower.startsWith("fix file ") || lower.startsWith("edit ") -> {
-                val remaining = input.replace(Regex("(?i)(fix|fix file|edit|update) "), "")
-                val filePath = remaining.substringBefore(":").trim()
-                val instruction = remaining.substringAfter(":").trim()
-                if (filePath.isBlank() || instruction.isBlank()) "❌ Usage: fix file path/to/file.kt: change button color to red"
-                else if (activeRepo.isBlank()) "❌ No active repo. Use 'set repo owner/repo' first."
-                else if (key.isBlank()) "❌ No Gemini API key set."
-                else repairFileInRepo(token, key, activeOwner, activeRepo, filePath, instruction)
-            }
-            lower.startsWith("add file ") || lower.startsWith("create file ") -> {
-                val remaining = input.replace(Regex("(?i)(add|create) file "), "")
-                val filePath = remaining.substringBefore(":").trim()
-                val description = remaining.substringAfter(":").trim()
-                if (filePath.isBlank() || description.isBlank()) "❌ Usage: add file path/to/file.kt: a login screen"
-                else if (activeRepo.isBlank()) "❌ No active repo."
-                else if (key.isBlank()) "❌ No Gemini API key set."
-                else createFileInRepo(token, key, activeOwner, activeRepo, filePath, description)
-            }
-            lower.startsWith("set repo ") || lower.startsWith("switch to ") -> {
-                val repo = lower.removePrefix("set repo ").removePrefix("switch to ").trim()
-                val parts = repo.split("/")
-                if (parts.size != 2) "❌ Format: set repo owner/repo"
-                else { activeOwner = parts[0]; activeRepo = parts[1]; "✅ Active repo: $activeOwner/$activeRepo" }
-            }
-            lower.startsWith("analyze repo ") || lower.startsWith("study repo ") -> {
-                val repo = input.replace(Regex("(?i)(analyze|study) repo "), "").trim()
-                val parts = repo.split("/")
-                if (parts.size != 2) "❌ Format: analyze repo owner/repo"
-                else {
-                    _state.value = _state.value.copy(executionMode = ExecutionMode.REPO_ANALYSIS)
-                    analyzePublicRepo(token, key, parts[0], parts[1])
-                }
-            }
-            lower.startsWith("transfer ") || lower.startsWith("port ") || lower.startsWith("add feature ") -> {
-                val instruction = input.replace(Regex("(?i)(transfer|port|add feature) "), "")
-                if (activeRepo.isBlank()) "❌ No active repo. Use 'set repo owner/repo' first."
-                else if (key.isBlank()) "❌ No Gemini API key set."
-                else {
-                    _state.value = _state.value.copy(executionMode = ExecutionMode.FEATURE_TRANSFER)
-                    transferFeaturesFromRepo(token, key, instruction)
-                }
-            }
-            lower.startsWith("merge repo ") || lower.startsWith("clone features from ") -> {
-                val sourceRepo = input.replace(Regex("(?i)(merge repo|clone features from) "), "").trim()
-                val parts = sourceRepo.split("/")
-                if (parts.size != 2) "❌ Format: merge repo owner/repo"
-                else if (activeRepo.isBlank()) "❌ No active repo. Use 'set repo owner/repo' first."
-                else {
-                    _state.value = _state.value.copy(executionMode = ExecutionMode.FEATURE_TRANSFER)
-                    mergeRepositoryFeatures(token, key, parts[0], parts[1])
-                }
-            }
-            else -> null
+            // ============================================
+// SECTION 3.10: GITHUB COMMANDS
+// ============================================
+
+private suspend fun executeGitHubCommand(input: String): String? {
+    val token = preferences.getGitHubToken()
+    if (token.isNullOrBlank()) return null
+    val apiKey = preferences.getApiKey()
+    if (apiKey.isNullOrBlank() && input.lowercase().contains("create app")) {
+        return "❌ No Gemini API key set. Add it in Protocol settings."
+    }
+    val key = apiKey ?: ""
+    val lower = input.lowercase().trim()
+    _state.value = _state.value.copy(executionMode = ExecutionMode.GITHUB_OPERATION)
+
+    if (lower.startsWith("create app") || lower.startsWith("build app") || lower.startsWith("make app")) {
+        if (!lower.contains("repo")) {
+            val appDesc = input.replace(Regex("(?i)(create|build|make) app"), "").trim()
+            val appName = appDesc.split(" ").firstOrNull()?.replace(" ", "-")?.take(50) ?: "MyApp"
+            val parts = appDesc.split(" ")
+            val description = if (parts.size > 1) parts.drop(1).joinToString(" ").trim() else "A simple application"
+            _state.value = _state.value.copy(executionMode = ExecutionMode.GENERATING_APP)
+            return createFullApplication(token, key, appName, description)
         }
     }
+
+    if (lower.contains("create") && lower.contains("repo")) {
+        val name = input.replace(Regex("(?i)(create|a|repo|repository|github)"), "").trim().replace(" ", "-").take(50)
+        return if (name.isBlank()) "❌ Please specify a repository name."
+        else githubApiCall("POST", "https://api.github.com/user/repos", token, """{"name":"$name","private":false,"auto_init":true}""")
+    }
+
+    if (lower.contains("list") && lower.contains("repo")) {
+        return githubApiCall("GET", "https://api.github.com/user/repos?per_page=10&sort=updated", token, null)
+    }
+
+    if (lower.startsWith("compile ") || lower.startsWith("build ")) {
+        val repo = lower.removePrefix("compile ").removePrefix("build ").trim()
+        val parts = repo.split("/")
+        return if (parts.size != 2) "❌ Format: compile repo owner/repo"
+        else triggerWorkflowDispatch(token, parts[0], parts[1])
+    }
+
+    if (lower.startsWith("browse repo ") || lower.startsWith("explore repo ")) {
+        val repo = lower.removePrefix("browse repo ").removePrefix("explore repo ").trim()
+        val parts = repo.split("/")
+        return if (parts.size != 2) "❌ Format: browse repo owner/repo"
+        else browseRepositoryContents(token, parts[0], parts[1])
+    }
+
+    if (lower.startsWith("read repo file ")) {
+        val parts = input.replace(Regex("(?i)read repo file "), "").trim().split(" ")
+        if (parts.size < 2) return "❌ Format: read repo file owner/repo path"
+        val repoParts = parts[0].split("/")
+        if (repoParts.size != 2) return "❌ Format: read repo file owner/repo path"
+        return readRepoFileContents(token, repoParts[0], repoParts[1], parts.drop(1).joinToString(" "))
+    }
+
+    if (lower.startsWith("fix ") || lower.startsWith("fix file ") || lower.startsWith("edit ")) {
+        val remaining = input.replace(Regex("(?i)(fix|fix file|edit|update) "), "")
+        val filePath = remaining.substringBefore(":").trim()
+        val instruction = remaining.substringAfter(":").trim()
+        if (filePath.isBlank() || instruction.isBlank()) return "❌ Usage: fix file path/to/file.kt: change button color to red"
+        if (activeRepo.isBlank()) return "❌ No active repo. Use 'set repo owner/repo' first."
+        if (key.isBlank()) return "❌ No Gemini API key set."
+        return repairFileInRepo(token, key, activeOwner, activeRepo, filePath, instruction)
+    }
+
+    if (lower.startsWith("add file ") || lower.startsWith("create file ")) {
+        val remaining = input.replace(Regex("(?i)(add|create) file "), "")
+        val filePath = remaining.substringBefore(":").trim()
+        val description = remaining.substringAfter(":").trim()
+        if (filePath.isBlank() || description.isBlank()) return "❌ Usage: add file path/to/file.kt: a login screen"
+        if (activeRepo.isBlank()) return "❌ No active repo."
+        if (key.isBlank()) return "❌ No Gemini API key set."
+        return createFileInRepo(token, key, activeOwner, activeRepo, filePath, description)
+    }
+
+    if (lower.startsWith("set repo ") || lower.startsWith("switch to ")) {
+        val repo = lower.removePrefix("set repo ").removePrefix("switch to ").trim()
+        val parts = repo.split("/")
+        if (parts.size != 2) return "❌ Format: set repo owner/repo"
+        activeOwner = parts[0]
+        activeRepo = parts[1]
+        return "✅ Active repo: $activeOwner/$activeRepo"
+    }
+
+    if (lower.startsWith("analyze repo ") || lower.startsWith("study repo ")) {
+        val repo = input.replace(Regex("(?i)(analyze|study) repo "), "").trim()
+        val parts = repo.split("/")
+        if (parts.size != 2) return "❌ Format: analyze repo owner/repo"
+        _state.value = _state.value.copy(executionMode = ExecutionMode.REPO_ANALYSIS)
+        return analyzePublicRepo(token, key, parts[0], parts[1])
+    }
+
+    if (lower.startsWith("transfer ") || lower.startsWith("port ") || lower.startsWith("add feature ")) {
+        val instruction = input.replace(Regex("(?i)(transfer|port|add feature) "), "")
+        if (activeRepo.isBlank()) return "❌ No active repo. Use 'set repo owner/repo' first."
+        if (key.isBlank()) return "❌ No Gemini API key set."
+        _state.value = _state.value.copy(executionMode = ExecutionMode.FEATURE_TRANSFER)
+        return transferFeaturesFromRepo(token, key, instruction)
+    }
+
+    if (lower.startsWith("merge repo ") || lower.startsWith("clone features from ")) {
+        val sourceRepo = input.replace(Regex("(?i)(merge repo|clone features from) "), "").trim()
+        val parts = sourceRepo.split("/")
+        if (parts.size != 2) return "❌ Format: merge repo owner/repo"
+        if (activeRepo.isBlank()) return "❌ No active repo. Use 'set repo owner/repo' first."
+        _state.value = _state.value.copy(executionMode = ExecutionMode.FEATURE_TRANSFER)
+        return mergeRepositoryFeatures(token, key, parts[0], parts[1])
+    }
+
+    return null
+}
+
 
     // ============================================
     // SECTION 3.11: FILE COMMANDS
