@@ -655,7 +655,7 @@ class AgentViewModel @Inject constructor(
                     if (repoParts.size != 2) "❌ Format: read repo file owner/repo path"
                     else readRepoFileContents(token, repoParts[0], repoParts[1], parts.drop(1).joinToString(" "))
                 }
-            // ============================================
+             // ============================================
 // SECTION 3.10: GITHUB COMMANDS
 // ============================================
 
