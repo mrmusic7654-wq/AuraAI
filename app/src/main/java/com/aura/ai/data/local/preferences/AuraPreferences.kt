@@ -95,6 +95,21 @@ class AuraPreferences @Inject constructor(
     fun saveThemeMode(mode: String) {
         prefs.edit().putString("theme_mode", mode).apply()
     }
+    fun getLastSessionId(): String? {
+    return runBlocking { prefs.data.map { it[LAST_SESSION_ID] }.first() }
+}
+
+fun setLastSessionId(id: String) {
+    runBlocking { prefs.edit { it[LAST_SESSION_ID] = id } }
+}
+
+fun getTotalApiCalls(): Int {
+    return runBlocking { prefs.data.map { it[TOTAL_API_CALLS] ?: 0 }.first() }
+}
+
+fun setTotalApiCalls(count: Int) {
+    runBlocking { prefs.edit { it[TOTAL_API_CALLS] = count } }
+}
 
     // ============================================
     // APP USAGE STATS
