@@ -530,12 +530,16 @@ class AgentViewModel @Inject constructor(
         val key = preferences.getApiKey() ?: return "❌ No API key."
 
         if (mimeType.startsWith("image/")) {
-            _state.value = _state.value.copy(executionMode = ExecutionMode.IMAGE_ANALYSIS)
-            val model = GenerativeModel("gemini-2.5-flash", key)
-            return try {
-                val response = model.generateContent(content { image(bytes); text(prompt) }).text ?: "No response"
-                recordModelUsage("gemini-2.5-flash"); response
-            } catch (e: Exception) { "❌ ${e.message}" }
+    _state.value = _state.value.copy(executionMode = ExecutionMode.IMAGE_ANALYSIS)
+    val model = GenerativeModel("gemini-2.5-flash", key)
+    val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+    return try {
+        val response = model.generateContent(content { 
+            image(bitmap)
+            text(prompt) 
+        }).text ?: "No response"
+        recordModelUsage("gemini-2.5-flash"); response
+    } catch (e: Exception) { "❌ ${e.message}" }
         }
 
         if (mimeType.startsWith("audio/")) {
@@ -574,78 +578,79 @@ class AgentViewModel @Inject constructor(
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 4.15: AUTONOMOUS APP GENERATION
-    // ═══════════════════════════════════════════
+// SECTION 4.15: AUTONOMOUS APP GENERATION
+// ═══════════════════════════════════════════
 
-    private suspend fun createFullApplication(token: String, key: String, appName: String, description: String): String {
-        _state.value = _state.value.copy(isGeneratingApp = true, generationProgress = "🚀 Starting")
-        pendingGenerationFiles = emptyMap()
-        projectContext = ProjectContext(packageName = "com.example.${appName.sanitize()}")
+private suspend fun createFullApplication(token: String, key: String, appName: String, description: String): String {
+    _state.value = _state.value.copy(isGeneratingApp = true, generationProgress = "🚀 Starting")
+    pendingGenerationFiles = emptyMap()
+    projectContext = ProjectContext(packageName = "com.example.${appName.sanitize()}")
+    val allFiles = mutableMapOf<String, String>()
 
-        try {
-            addProgressMessage("🧠 Phase 1/6: Deep architecture analysis...")
-            val architecture = planArchitectureDeep(key, appName, description)
-            if (architecture.files.isEmpty()) { _state.value = _state.value.copy(isGeneratingApp = false); return "❌ Planning failed." }
-            addProgressMessage("📋 ${architecture.files.size} files | ${architecture.techStack}")
+    try {
+        addProgressMessage("🧠 Phase 1/6: Deep architecture analysis...")
+        val architecture = planArchitectureDeep(key, appName, description)
+        if (architecture.files.isEmpty()) { _state.value = _state.value.copy(isGeneratingApp = false); return "❌ Planning failed." }
+        addProgressMessage("📋 ${architecture.files.size} files | ${architecture.techStack}")
 
-            addProgressMessage("📁 Phase 2/6: Creating repository...")
-            val createResult = githubApiCall("POST", "https://api.github.com/user/repos", token, """{"name":"$appName","private":false,"auto_init":false}""")
-            if (createResult.startsWith("❌")) { _state.value = _state.value.copy(isGeneratingApp = false); return "❌ $createResult" }
-            val userResult = githubApiCall("GET", "https://api.github.com/user", token, null)
-            val owner = Regex("\"login\"\\s*:\\s*\"([^\"]+)\"").find(userResult)?.groupValues?.get(1) ?: return "❌ No username."
-            activeOwner = owner; activeRepo = appName
+        addProgressMessage("📁 Phase 2/6: Creating repository...")
+        val createResult = githubApiCall("POST", "https://api.github.com/user/repos", token, """{"name":"$appName","private":false,"auto_init":false}""")
+        if (createResult.startsWith("❌")) { _state.value = _state.value.copy(isGeneratingApp = false); return "❌ $createResult" }
+        val userResult = githubApiCall("GET", "https://api.github.com/user", token, null)
+        val owner = Regex("\"login\"\\s*:\\s*\"([^\"]+)\"").find(userResult)?.groupValues?.get(1) ?: return "❌ No username."
+        activeOwner = owner; activeRepo = appName
 
-            addProgressMessage("⚙️ Phase 3/6: Generating build system from templates...")
-            val buildFiles = generateBuildSystem(appName, architecture)
-            allFiles.putAll(buildFiles)
+        addProgressMessage("⚙️ Phase 3/6: Generating build system from templates...")
+        val buildFiles = generateBuildSystem(appName, architecture)
+        allFiles.putAll(buildFiles)
 
-            addProgressMessage("📝 Phase 4/6: Generating source files...")
-            val sourceFiles = architecture.files.filter { it.startsWith("app/src/") }
-            val generated = generateAllFilesOneShot(key, appName, description, architecture, sourceFiles, allFiles)
-            allFiles.putAll(generated)
-            addProgressMessage("✅ ${allFiles.size} files generated")
+        addProgressMessage("📝 Phase 4/6: Generating source files...")
+        val sourceFiles = architecture.files.filter { it.startsWith("app/src/") }
+        val generated = generateAllFilesOneShot(key, appName, description, architecture, sourceFiles, allFiles)
+        allFiles.putAll(generated)
+        addProgressMessage("✅ ${allFiles.size} files generated")
 
-            addProgressMessage("🔍 Phase 5/6: Pre-validation...")
-            val validation = preValidateProject(allFiles)
-            if (!validation.isValid) {
-                addProgressMessage("⚠️ ${validation.issues.size} issues found. Auto-fixing...")
-                val fixed = autoFixValidationIssues(key, allFiles, validation.issues)
-                allFiles.clear(); allFiles.putAll(fixed)
-                addProgressMessage("✅ Fixed. Re-validating...")
-                val revalidation = preValidateProject(allFiles)
-                if (!revalidation.isValid) {
-                    addProgressMessage("⚠️ ${revalidation.issues.size} issues remain. Will fix during build.")
-                }
+        addProgressMessage("🔍 Phase 5/6: Pre-validation...")
+        val validation = preValidateProject(allFiles)
+        if (!validation.isValid) {
+            addProgressMessage("⚠️ ${validation.issues.size} issues found. Auto-fixing...")
+            val fixed = autoFixValidationIssues(key, allFiles, validation.issues)
+            allFiles.clear()
+            allFiles.putAll(fixed)
+            addProgressMessage("✅ Fixed. Re-validating...")
+            val revalidation = preValidateProject(allFiles)
+            if (!revalidation.isValid) {
+                addProgressMessage("⚠️ ${revalidation.issues.size} issues remain. Will fix during build.")
             }
-
-            addProgressMessage("📤 Phase 6/6: Pushing & building...")
-            val pushed = batchPushViaGitData(token, owner, appName, allFiles)
-            if (pushed) {
-                addWorkflowFile(token, owner, appName, appName)
-                addProgressMessage("✅ Pushed ${allFiles.size} files in one commit")
-                addProgressMessage("🔄 Starting build verification...")
-                val buildResult = executeBuildLoop(token, key, owner, appName)
-                _state.value = _state.value.copy(isGeneratingApp = false, executionMode = ExecutionMode.IDLE)
-                return buildResult
-            } else {
-                addProgressMessage("⚠️ Batch push failed. Using per-file push...")
-                var pushedCount = 0
-                allFiles.forEach { (path, content) ->
-                    val encoded = android.util.Base64.encodeToString(content.toByteArray(), android.util.Base64.NO_WRAP)
-                    if (!githubApiCall("PUT", "https://api.github.com/repos/$owner/$appName/contents/$path", token, """{"message":"Add $path","content":"$encoded"}""").startsWith("❌")) pushedCount++
-                }
-                addWorkflowFile(token, owner, appName, appName)
-                addProgressMessage("✅ Pushed $pushedCount/${allFiles.size} files")
-                val buildResult = executeBuildLoop(token, key, owner, appName)
-                _state.value = _state.value.copy(isGeneratingApp = false, executionMode = ExecutionMode.IDLE)
-                return buildResult
-            }
-        } catch (e: Exception) {
-            _state.value = _state.value.copy(isGeneratingApp = false)
-            return "❌ ${e.message}"
         }
-    }
 
+        addProgressMessage("📤 Phase 6/6: Pushing & building...")
+        val pushed = batchPushViaGitData(token, owner, appName, allFiles)
+        if (pushed) {
+            addWorkflowFile(token, owner, appName, appName)
+            addProgressMessage("✅ Pushed ${allFiles.size} files in one commit")
+            addProgressMessage("🔄 Starting build verification...")
+            val buildResult = executeBuildLoop(token, key, owner, appName)
+            _state.value = _state.value.copy(isGeneratingApp = false, executionMode = ExecutionMode.IDLE)
+            return buildResult
+        } else {
+            addProgressMessage("⚠️ Batch push failed. Using per-file push...")
+            var pushedCount = 0
+            for ((path, content) in allFiles) {
+                val encoded = android.util.Base64.encodeToString(content.toByteArray(), android.util.Base64.NO_WRAP)
+                if (!githubApiCall("PUT", "https://api.github.com/repos/$owner/$appName/contents/$path", token, """{"message":"Add $path","content":"$encoded"}""").startsWith("❌")) pushedCount++
+            }
+            addWorkflowFile(token, owner, appName, appName)
+            addProgressMessage("✅ Pushed $pushedCount/${allFiles.size} files")
+            val buildResult = executeBuildLoop(token, key, owner, appName)
+            _state.value = _state.value.copy(isGeneratingApp = false, executionMode = ExecutionMode.IDLE)
+            return buildResult
+        }
+    } catch (e: Exception) {
+        _state.value = _state.value.copy(isGeneratingApp = false)
+        return "❌ ${e.message}"
+    }
+}
     // ═══════════════════════════════════════════
     // SECTION 4.15.1: DEEP ARCHITECTURE PLANNING
     // ═══════════════════════════════════════════
