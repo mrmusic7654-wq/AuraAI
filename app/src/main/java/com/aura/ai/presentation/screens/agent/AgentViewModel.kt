@@ -21,7 +21,7 @@ import com.aura.ai.services.CodespacesManager
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.google.ai.client.generativeai.type.generationConfig
-import com.google.ai.client.generativeai.type.image
+import com.google.ai.client.generativeai.type.asimage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
