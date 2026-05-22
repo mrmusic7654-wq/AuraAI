@@ -11,7 +11,9 @@ import javax.inject.Singleton
 class AuraPreferences @Inject constructor(
     private val context: Context
 ) {
-    // Encrypted storage for sensitive keys
+    // ═══════════════════════════════════════════
+    // ENCRYPTED STORAGE FOR SENSITIVE KEYS
+    // ═══════════════════════════════════════════
     private val masterKey = MasterKey.Builder(context)
         .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
         .build()
@@ -24,23 +26,24 @@ class AuraPreferences @Inject constructor(
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
 
-    // Regular preferences for non-sensitive data
+    // ═══════════════════════════════════════════
+    // REGULAR STORAGE FOR NON-SENSITIVE DATA
+    // ═══════════════════════════════════════════
     private val prefs: SharedPreferences = context.getSharedPreferences("aura_prefs", Context.MODE_PRIVATE)
 
-    // ============================================
+    // ═══════════════════════════════════════════
     // DEFAULT API KEYS (Replace with your actual keys)
-    // ============================================
+    // ═══════════════════════════════════════════
     companion object {
         const val DEFAULT_GEMINI_API_KEY = "AIzaSyBEbUwT5_LDxENu7FNpD5oSTs3mvwJDDPc"
         const val DEFAULT_GITHUB_TOKEN = "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"
         const val DEFAULT_TELEGRAM_TOKEN = "8962193188:AAEmhBBttbsbF9nFSMG5Kv1SqCpHJh8MNaQ"
     }
 
-    // ============================================
-    // GEMINI API KEY
-    // ============================================
+    // ═══════════════════════════════════════════
+    // SECTION 1: GEMINI API KEY
+    // ═══════════════════════════════════════════
     fun getApiKey(): String? {
-        // First check encrypted storage, then fall back to default
         val stored = securePrefs.getString("api_key", null)
         return if (stored.isNullOrBlank()) DEFAULT_GEMINI_API_KEY.takeIf { it != "YOUR_GEMINI_API_KEY_HERE" } else stored
     }
@@ -53,9 +56,9 @@ class AuraPreferences @Inject constructor(
         return getApiKey()?.isNotBlank() == true
     }
 
-    // ============================================
-    // GITHUB TOKEN
-    // ============================================
+    // ═══════════════════════════════════════════
+    // SECTION 2: GITHUB TOKEN
+    // ═══════════════════════════════════════════
     fun getGitHubToken(): String? {
         val stored = securePrefs.getString("github_token", null)
         return if (stored.isNullOrBlank()) DEFAULT_GITHUB_TOKEN.takeIf { it != "YOUR_GITHUB_TOKEN_HERE" } else stored
@@ -69,9 +72,9 @@ class AuraPreferences @Inject constructor(
         return getGitHubToken()?.isNotBlank() == true
     }
 
-    // ============================================
-    // TELEGRAM BOT TOKEN
-    // ============================================
+    // ═══════════════════════════════════════════
+    // SECTION 3: TELEGRAM BOT TOKEN
+    // ═══════════════════════════════════════════
     fun getTelegramToken(): String? {
         val stored = securePrefs.getString("telegram_token", null)
         return if (stored.isNullOrBlank()) DEFAULT_TELEGRAM_TOKEN.takeIf { it.isNotBlank() } else stored
@@ -85,9 +88,9 @@ class AuraPreferences @Inject constructor(
         return getTelegramToken()?.isNotBlank() == true
     }
 
-    // ============================================
-    // THEME PREFERENCE
-    // ============================================
+    // ═══════════════════════════════════════════
+    // SECTION 4: THEME
+    // ═══════════════════════════════════════════
     fun getThemeMode(): String {
         return prefs.getString("theme_mode", "Cyberpunk Dark") ?: "Cyberpunk Dark"
     }
@@ -95,40 +98,72 @@ class AuraPreferences @Inject constructor(
     fun saveThemeMode(mode: String) {
         prefs.edit().putString("theme_mode", mode).apply()
     }
+
+    // ═══════════════════════════════════════════
+    // SECTION 5: MODEL PREFERENCES
+    // ═══════════════════════════════════════════
+    fun getPreferredModel(): String? {
+        return prefs.getString("preferred_model", null)
+    }
+
+    fun setPreferredModel(model: String) {
+        prefs.edit().putString("preferred_model", model).apply()
+    }
+
+    // ═══════════════════════════════════════════
+    // SECTION 6: SESSION PERSISTENCE
+    // ═══════════════════════════════════════════
     fun getLastSessionId(): String? {
-    return runBlocking { prefs.data.map { it[LAST_SESSION_ID] }.first() }
-}
+        return prefs.getString("last_session_id", null)
+    }
 
-fun setLastSessionId(id: String) {
-    runBlocking { prefs.edit { it[LAST_SESSION_ID] = id } }
-}
+    fun setLastSessionId(id: String) {
+        prefs.edit().putString("last_session_id", id).apply()
+    }
 
-fun getTotalApiCalls(): Int {
-    return runBlocking { prefs.data.map { it[TOTAL_API_CALLS] ?: 0 }.first() }
-}
-
-fun setTotalApiCalls(count: Int) {
-    runBlocking { prefs.edit { it[TOTAL_API_CALLS] = count } }
-}
-
-    // ============================================
-    // APP USAGE STATS
-    // ============================================
+    // ═══════════════════════════════════════════
+    // SECTION 7: API USAGE TRACKING
+    // ═══════════════════════════════════════════
     fun getTotalApiCalls(): Int {
         return prefs.getInt("total_api_calls", 0)
     }
 
-    fun incrementApiCalls() {
-        prefs.edit().putInt("total_api_calls", getTotalApiCalls() + 1).apply()
+    fun setTotalApiCalls(count: Int) {
+        prefs.edit().putInt("total_api_calls", count).apply()
+    }
+
+    fun incrementApiCalls(): Int {
+        val newCount = getTotalApiCalls() + 1
+        setTotalApiCalls(newCount)
+        return newCount
     }
 
     fun resetApiCalls() {
         prefs.edit().putInt("total_api_calls", 0).apply()
     }
 
-    // ============================================
-    // USER PREFERENCES
-    // ============================================
+    fun getDailyResetDate(): String {
+        return prefs.getString("daily_reset_date", "") ?: ""
+    }
+
+    fun setDailyResetDate(date: String) {
+        prefs.edit().putString("daily_reset_date", date).apply()
+    }
+
+    fun resetDailyCountersIfNeeded(): Boolean {
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+        val lastReset = getDailyResetDate()
+        if (lastReset != today) {
+            setTotalApiCalls(0)
+            setDailyResetDate(today)
+            return true
+        }
+        return false
+    }
+
+    // ═══════════════════════════════════════════
+    // SECTION 8: USER PROFILE
+    // ═══════════════════════════════════════════
     fun getUserName(): String? {
         return prefs.getString("user_name", null)
     }
@@ -142,17 +177,56 @@ fun setTotalApiCalls(count: Int) {
         if (firstRun) prefs.edit().putBoolean("first_run", false).apply()
         return firstRun
     }
-    fun setPreferredModel(model: String) {
-    prefs.edit().putString("preferred_model", model).apply()
-}
 
-fun getPreferredModel(): String? {
-    return prefs.getString("preferred_model", null)
-}
+    // ═══════════════════════════════════════════
+    // SECTION 9: CODESPACES
+    // ═══════════════════════════════════════════
+    fun getActiveCodespaceId(): String? {
+        return prefs.getString("active_codespace_id", null)
+    }
 
-    // ============================================
-    // DATA MANAGEMENT
-    // ============================================
+    fun setActiveCodespaceId(id: String) {
+        prefs.edit().putString("active_codespace_id", id).apply()
+    }
+
+    fun clearCodespaceId() {
+        prefs.edit().remove("active_codespace_id").apply()
+    }
+
+    // ═══════════════════════════════════════════
+    // SECTION 10: GENERIC HELPERS
+    // ═══════════════════════════════════════════
+    fun putString(key: String, value: String) {
+        prefs.edit().putString(key, value).apply()
+    }
+
+    fun getString(key: String, default: String?): String? {
+        return prefs.getString(key, default)
+    }
+
+    fun putInt(key: String, value: Int) {
+        prefs.edit().putInt(key, value).apply()
+    }
+
+    fun getInt(key: String, default: Int): Int {
+        return prefs.getInt(key, default)
+    }
+
+    fun putBoolean(key: String, value: Boolean) {
+        prefs.edit().putBoolean(key, value).apply()
+    }
+
+    fun getBoolean(key: String, default: Boolean): Boolean {
+        return prefs.getBoolean(key, default)
+    }
+
+    fun remove(key: String) {
+        prefs.edit().remove(key).apply()
+    }
+
+    // ═══════════════════════════════════════════
+    // SECTION 11: DATA MANAGEMENT
+    // ═══════════════════════════════════════════
     fun clearAllData() {
         securePrefs.edit().clear().apply()
         prefs.edit().clear().apply()
