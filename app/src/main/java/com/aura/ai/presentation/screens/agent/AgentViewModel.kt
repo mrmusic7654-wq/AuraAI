@@ -650,19 +650,115 @@ private suspend fun createFullApplication(token: String, key: String, appName: S
         return "❌ ${e.message}"
     }
 }
-    // ═══════════════════════════════════════════
+        // ═══════════════════════════════════════════
     // SECTION 4.15.1: DEEP ARCHITECTURE PLANNING
     // ═══════════════════════════════════════════
 
     private suspend fun planArchitectureDeep(key: String, appName: String, description: String): AppArchitecture {
-        val model = GenerativeModel(selectOptimalModel("code_gen"), key, generationConfig { temperature = 0.15f; maxOutputTokens = 60000 })
+        val model = GenerativeModel(
+            selectOptimalModel("code_gen"), key,
+            generationConfig { temperature = 0.2f; maxOutputTokens = 60000 }
+        )
+        
+        val prompt = """
+You are an expert Android architect. Plan a COMPLETE file structure for this app.
+
+APP NAME: $appName
+DESCRIPTION: $description
+
+Analyze the description and determine:
+1. What screens/features are needed
+2. What dependencies are required
+3. What files must exist for compilation
+
+Return ONLY a valid JSON object with this exact structure:
+{
+  "files": ["path/to/file1.kt", "path/to/file2.xml", ...],
+  "techStack": "Jetpack Compose with Material3",
+  "dependencies": ["androidx.compose.ui:ui:1.6.0", ...],
+  "structure": "MVVM with single activity"
+}
+
+IMPORTANT RULES:
+- The "files" array MUST include EVERY file needed for a COMPILABLE Android app
+- ALWAYS include these root files:
+  - build.gradle.kts (root)
+  - app/build.gradle.kts
+  - settings.gradle.kts
+  - gradle.properties
+  - gradle/wrapper/gradle-wrapper.properties
+  - app/src/main/AndroidManifest.xml
+- Include ALL Kotlin source files with full paths
+- Include resource files (themes.xml, colors.xml, strings.xml)
+- Package name: com.example.${appName.lowercase().replace(" ", "").replace("-", "")}
+- Return ONLY the JSON object. No markdown, no explanation.
+        """.trimIndent()
+        
         return try {
-            val response = model.generateContent(content { text("Deep analyze: $appName - $description. Return JSON: {\"files\":[],\"techStack\":\"\",\"dependencies\":[],\"structure\":\"\",\"componentTree\":{},\"packageStructure\":{}}") }).text
-            val text = response ?: return AppArchitecture(emptyList(), "", emptyList(), "")
+            val response = model.generateContent(content { text(prompt) }).text
+            val text = response ?: run {
+                // Fallback: generate a basic file list
+                return AppArchitecture(
+                    files = listOf(
+                        "app/src/main/java/com/example/${appName.sanitize()}/MainActivity.kt",
+                        "app/src/main/java/com/example/${appName.sanitize()}/ui/theme/Theme.kt",
+                        "app/src/main/java/com/example/${appName.sanitize()}/ui/theme/Color.kt",
+                        "app/src/main/java/com/example/${appName.sanitize()}/ui/screen/MainScreen.kt",
+                        "app/src/main/res/values/strings.xml",
+                        "app/src/main/res/values/themes.xml"
+                    ),
+                    techStack = "Jetpack Compose with Material3",
+                    dependencies = listOf(
+                        "androidx.compose.ui:ui",
+                        "androidx.compose.material3:material3",
+                        "androidx.activity:activity-compose:1.8.2"
+                    ),
+                    structure = "Basic Compose setup"
+                )
+            }
             recordModelUsage(selectOptimalModel("code_gen"))
-            val json = text.substringAfter("{").substringBeforeLast("}"); val obj = JSONObject("{${json}}")
-            AppArchitecture((0 until obj.getJSONArray("files").length()).map { obj.getJSONArray("files").getString(it) }, obj.optString("techStack"), (0 until obj.getJSONArray("dependencies").length()).map { obj.getJSONArray("dependencies").getString(it) }, obj.optString("structure"))
-        } catch (e: Exception) { AppArchitecture(emptyList(), "Standard", emptyList(), "Basic") }
+            
+            // Clean the response
+            val cleaned = text.trim()
+                .removePrefix("```json")
+                .removePrefix("```")
+                .removeSuffix("```")
+                .trim()
+            
+            val jsonStr = cleaned.substringAfter("{").substringBeforeLast("}")
+            val obj = JSONObject("{${jsonStr}}")
+            
+            val files = (0 until obj.getJSONArray("files").length()).map { 
+                obj.getJSONArray("files").getString(it) 
+            }
+            val deps = try {
+                (0 until obj.getJSONArray("dependencies").length()).map { 
+                    obj.getJSONArray("dependencies").getString(it) 
+                }
+            } catch (e: Exception) { 
+                listOf("androidx.compose.ui:ui", "androidx.compose.material3:material3") 
+            }
+            
+            AppArchitecture(
+                files = files,
+                techStack = obj.optString("techStack", "Jetpack Compose"),
+                dependencies = deps,
+                structure = obj.optString("structure", "MVVM")
+            )
+        } catch (e: Exception) {
+            // Final fallback
+            val sanitized = appName.sanitize()
+            AppArchitecture(
+                files = listOf(
+                    "app/src/main/java/com/example/$sanitized/MainActivity.kt",
+                    "app/src/main/java/com/example/$sanitized/ui/screen/MainScreen.kt",
+                    "app/src/main/AndroidManifest.xml"
+                ),
+                techStack = "Jetpack Compose with Material3",
+                dependencies = listOf("androidx.compose.ui:ui", "androidx.compose.material3:material3"),
+                structure = "Single Activity Compose"
+            )
+        }
     }
 
     // ═══════════════════════════════════════════
