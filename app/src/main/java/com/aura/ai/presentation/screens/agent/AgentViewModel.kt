@@ -112,6 +112,25 @@ class AgentViewModel @Inject constructor(private val preferences: AuraPreference
         if (lower.startsWith("create app") || lower.startsWith("build app") || lower.startsWith("make app")) { if (lower.contains("repo")) return githubCommand(input); _state.value = _state.value.copy(executionMode = ExecutionMode.GENERATING_APP); return createApp(input) }
         return githubCommand(input) ?: chatWithGemini(input)
     }
+    // Codespace commands
+if (lower.startsWith("codespace ")) {
+    val token = preferences.getGitHubToken() ?: return "❌ No GitHub token."
+    val manager = CodespacesManager(token)
+    if (lower.startsWith("codespace create")) {
+        val parts = lower.removePrefix("codespace create").trim().split("/")
+        val o = if (parts.size == 2) parts[0] else activeOwner
+        val r = if (parts.size == 2) parts[1] else activeRepo
+        if (o.isBlank() || r.isBlank()) return "❌ Specify owner/repo."
+        val cs = manager.createCodespace(o, r) ?: return "❌ Failed."
+        _state.value = _state.value.copy(activeCodespaceId = cs.id, codespaceMode = true)
+        return "🖥️ Codespace: ${cs.name}\n🔗 ${cs.webUrl}"
+    }
+    if (lower == "codespace list") {
+        val list = manager.listCodespaces()
+        return if (list.isEmpty()) "📁 None." else list.joinToString("\n") { "• ${it.name}" }
+    }
+    return "❌ Unknown codespace command."
+}
 
     // ═══════════════════════════════════════════
     // SECTION 2.3: GITHUB COMMANDS
