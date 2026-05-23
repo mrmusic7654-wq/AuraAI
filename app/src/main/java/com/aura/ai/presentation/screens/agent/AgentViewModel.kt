@@ -3,7 +3,6 @@ package com.aura.ai.presentation.screens.agent
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
-import android.net.ConnectivityManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Environment
@@ -27,8 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Requestimport okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -45,7 +43,7 @@ data class ChatMessage(val text: String, val isUser: Boolean)
 data class ModelInfo(val name: String, val displayName: String, val strength: String, val dailyRequests: Int, val dailyLimit: Int, val isInCooldown: Boolean, val isSelected: Boolean)
 data class BuildLoopState(val attemptNumber: Int = 0, val maxAttempts: Int = 20, val buildStatus: BuildStatus = BuildStatus.IDLE, val workflowRunId: Long? = null, val errorSummary: String = "", val lastFixDescription: String = "", val buildUrl: String = "", val totalFixesApplied: Int = 0, val artifactUrl: String? = null)
 enum class BuildStatus { IDLE, BUILDING, WAITING_FOR_BUILD, BUILD_SUCCESS, ANALYZING_ERROR, FIXING, RETRYING, FAILED, DOWNLOADING_ARTIFACT }
-data class AgentUiState(val messages: List<ChatMessage> = listOf(ChatMessage("AURA AI - READY", false)), val input: String = "", val loading: Boolean = false, val isExecuting: Boolean = false, val currentTask: String = "", val executionMode: ExecutionMode = ExecutionMode.IDLE, val activeModel: String = "gemini-2.5-flash", val showDrawer: Boolean = false, val showModelDashboard: Boolean = false, val manualModelSelected: Boolean = false, val currentSessionId: String? = null, val buildLoop: BuildLoopState? = null, val isGeneratingApp: Boolean = false, val generationProgress: String = "")
+data class AgentUiState(val messages: List<ChatMessage> = listOf(ChatMessage("AURA AI - READY", false)), val input: String = "", val loading: Boolean = false, val isExecuting: Boolean = false, val currentTask: String = "", val executionMode: ExecutionMode = ExecutionMode.IDLE, val activeModel: String = "gemini-2.5-flash", val showDrawer: Boolean = false, val showModelDashboard: Boolean = false, val manualModelSelected: Boolean = false, val currentSessionId: String? = null, val buildLoop: BuildLoopState? = null, val isGeneratingApp: Boolean = false, val generationProgress: String = "", val codespaceMode: Boolean = false, val activeCodespaceId: String? = null)
 enum class ExecutionMode { IDLE, CHATTING, GENERATING_APP, PHONE_CONTROL, GITHUB_OPERATION, FILE_OPERATION, REPO_ANALYSIS, FEATURE_TRANSFER }
 
 private sealed class WorkflowResult { data object Success : WorkflowResult(); data class Failure(val error: String, val logs: String) : WorkflowResult(); data object Timeout : WorkflowResult() }
@@ -73,13 +71,21 @@ class AgentViewModel @Inject constructor(private val preferences: AuraPreference
     private val modelCooldowns = mutableMapOf<String, Long>()
     private var consecutiveFailures = 0
 
-    init { loadSessions(); loadModelUsage(); viewModelScope.launch { resetDailyCountersIfNeeded() } }
+    init {
+        loadSessions()
+        loadModelUsage()
+        viewModelScope.launch {
+            resetDailyCountersIfNeeded()
+            val lastId = preferences.getLastSessionId()
+            if (lastId != null) switchSession(lastId)
+            else if (_sessions.value.isEmpty()) createNewSession()
+        }
+    }
 
     private fun selectModel(): String { if (_state.value.manualModelSelected) return _state.value.activeModel; if (consecutiveFailures >= 3) return "gemini-2.0-flash-lite"; return "gemini-2.5-flash" }
     private fun isModelInCooldown(m: String) = modelCooldowns[m]?.let { System.currentTimeMillis() < it } ?: false
     private fun recordModelUsage(m: String) { viewModelScope.launch { val e = sessionDb.modelUsageDao().getModelUsage(m); sessionDb.modelUsageDao().insertOrUpdateModelUsage(ModelUsageEntity(m, (e?.dailyRequests ?: 0) + 1, 1500, "", 0, "")) } }
     private fun applyModelCooldown(m: String) { consecutiveFailures++; modelCooldowns[m] = System.currentTimeMillis() + 60000 }
-    private fun resetFailureState() { consecutiveFailures = 0 }
 
     // ═══════════════════════════════════════════
     // SECTION 2.1: PUBLIC INTERFACE
@@ -109,34 +115,29 @@ class AgentViewModel @Inject constructor(private val preferences: AuraPreference
         if (lower == "device info") return "📱 ${Build.MODEL}\n🤖 ${Build.VERSION.RELEASE}"
         if (lower == "time") return "🕐 ${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())}"
         if (lower.startsWith("open ")) { val app = lower.removePrefix("open ").trim(); val pkg = resolveApp(app) ?: return "❌ Unknown app"; return try { val i = com.aura.ai.AuraApplication.instance.packageManager.getLaunchIntentForPackage(pkg); i?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); com.aura.ai.AuraApplication.instance.startActivity(i); "✅ Opened $app" } catch (e: Exception) { "❌ ${e.message}" } }
+        if (lower == "home") { val s = AuraAccessibilityService.instance; if (s != null) { s.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME); return "🏠 Home" } }
+        if (lower == "back") { val s = AuraAccessibilityService.instance; if (s != null) { s.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK); return "⬅️ Back" } }
+        if (lower == "screenshot") { val s = AuraAccessibilityService.instance; if (s != null) { s.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT); return "📸 Screenshot" } }
         if (lower.startsWith("create app") || lower.startsWith("build app") || lower.startsWith("make app")) { if (lower.contains("repo")) return githubCommand(input); _state.value = _state.value.copy(executionMode = ExecutionMode.GENERATING_APP); return createApp(input) }
+        if (lower.startsWith("continue ")) { _state.value = _state.value.copy(executionMode = ExecutionMode.GENERATING_APP); return continueApp(input) }
+        if (lower.startsWith("codespace ")) { return codespaceCommand(lower) }
         return githubCommand(input) ?: chatWithGemini(input)
     }
-}
-
-    // Codespace commands
-if (lower.startsWith("codespace ")) {
-    val token = preferences.getGitHubToken() ?: return "❌ No GitHub token."
-    val manager = CodespacesManager(token)
-    if (lower.startsWith("codespace create")) {
-        val parts = lower.removePrefix("codespace create").trim().split("/")
-        val o = if (parts.size == 2) parts[0] else activeOwner
-        val r = if (parts.size == 2) parts[1] else activeRepo
-        if (o.isBlank() || r.isBlank()) return "❌ Specify owner/repo."
-        val cs = manager.createCodespace(o, r) ?: return "❌ Failed."
-        _state.value = _state.value.copy(activeCodespaceId = cs.id, codespaceMode = true)
-        return "🖥️ Codespace: ${cs.name}\n🔗 ${cs.webUrl}"
-    }
-    if (lower == "codespace list") {
-        val list = manager.listCodespaces()
-        return if (list.isEmpty()) "📁 None." else list.joinToString("\n") { "• ${it.name}" }
-    }
-    return "❌ Unknown codespace command."
-}
-
 
     // ═══════════════════════════════════════════
-    // SECTION 2.3: GITHUB COMMANDS
+    // SECTION 2.3: CODESPACE COMMANDS
+    // ═══════════════════════════════════════════
+
+    private suspend fun codespaceCommand(lower: String): String {
+        val token = preferences.getGitHubToken() ?: return "❌ No GitHub token."
+        val manager = CodespacesManager(token)
+        if (lower.startsWith("codespace create")) { val parts = lower.removePrefix("codespace create").trim().split("/"); val o = if (parts.size == 2) parts[0] else activeOwner; val r = if (parts.size == 2) parts[1] else activeRepo; if (o.isBlank() || r.isBlank()) return "❌ Specify owner/repo."; val cs = manager.createCodespace(o, r) ?: return "❌ Failed."; _state.value = _state.value.copy(activeCodespaceId = cs.id, codespaceMode = true); return "🖥️ Codespace: ${cs.name}\n🔗 ${cs.webUrl}" }
+        if (lower == "codespace list") { val list = manager.listCodespaces(); return if (list.isEmpty()) "📁 None." else list.joinToString("\n") { "• ${it.name}" } }
+        return "❌ Unknown codespace command."
+    }
+
+    // ═══════════════════════════════════════════
+    // SECTION 2.4: GITHUB COMMANDS
     // ═══════════════════════════════════════════
 
     private suspend fun githubCommand(input: String): String? {
@@ -146,34 +147,58 @@ if (lower.startsWith("codespace ")) {
         if (lower.startsWith("compile ")) { val repo = lower.removePrefix("compile ").trim(); val p = repo.split("/"); if (p.size != 2) return "❌ Format: compile owner/repo"; return triggerBuild(token, p[0], p[1]) }
         if (lower.startsWith("browse repo ")) { val repo = lower.removePrefix("browse repo ").trim(); val p = repo.split("/"); if (p.size != 2) return "❌ Format: browse owner/repo"; return browseRepo(token, p[0], p[1]) }
         if (lower.startsWith("set repo ")) { val repo = lower.removePrefix("set repo ").trim(); val p = repo.split("/"); if (p.size != 2) return "❌ Format: set repo owner/repo"; activeOwner = p[0]; activeRepo = p[1]; return "✅ Active: $activeOwner/$activeRepo" }
+        if (lower.startsWith("read repo file ")) { val parts = input.replace(Regex("(?i)read repo file "), "").trim().split(" "); if (parts.size < 2) return "❌ Format: read repo file owner/repo path"; val rp = parts[0].split("/"); if (rp.size != 2) return "❌ Format."; return readFile(token, rp[0], rp[1], parts.drop(1).joinToString(" ")) }
         return null
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 2.4: APP GENERATION - SIMPLE & DIRECT
+    // SECTION 2.5: APP GENERATION
     // ═══════════════════════════════════════════
 
     private suspend fun createApp(input: String): String {
         val token = preferences.getGitHubToken() ?: return "❌ No GitHub token."
         val key = preferences.getApiKey() ?: return "❌ No Gemini API key."
         _state.value = _state.value.copy(isGeneratingApp = true)
-        
         val appDesc = input.replace(Regex("(?i)(create|build|make) app"), "").trim()
         val appName = appDesc.split(" ").firstOrNull()?.sanitize()?.take(50) ?: "MyApp"
         val description = appDesc.split(" ").drop(1).joinToString(" ").trim().ifBlank { "A simple Android app" }
-        
+        return generateApp(token, key, appName, description, null)
+    }
+
+    private suspend fun continueApp(input: String): String {
+        val token = preferences.getGitHubToken() ?: return "❌ No GitHub token."
+        val key = preferences.getApiKey() ?: return "❌ No Gemini API key."
+        if (activeRepo.isBlank()) return "❌ No active repo. Use 'set repo owner/repo' first."
+        _state.value = _state.value.copy(isGeneratingApp = true)
+        val instruction = input.removePrefix("continue ").trim()
+        val existingFiles = getFileTree(token, activeOwner, activeRepo)
+        addMsg("📁 Reading ${existingFiles.size} existing files...")
+        val existingContext = buildExistingContext(token, activeOwner, activeRepo, existingFiles)
+        return generateApp(token, key, activeRepo, instruction, existingContext)
+    }
+
+    private suspend fun generateApp(token: String, key: String, appName: String, description: String, existingContext: String?): String {
         try {
             addMsg("🧠 Planning $appName...")
             val model = GenerativeModel(selectModel(), key, generationConfig { temperature = 0.2f; maxOutputTokens = 60000 })
             
-            // Step 1: Plan everything in one prompt
-            val planPrompt = """
+            val planPrompt = if (existingContext != null) """
+You are continuing an existing Android app. The user wants: "$description"
+
+EXISTING PROJECT FILES:
+$existingContext
+
+Your task: Generate new/modified files to add this feature to the existing app.
+Keep all existing code intact. Only add or modify what's needed.
+
+FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
+===FILE:path/to/file.kt===
+[complete file content - either new or modified]
+===END===
+            """.trimIndent() else """
 You are an AI agent that creates complete Android apps. The user wants: "$appName - $description"
 
-Your task: Plan AND generate ALL files for a complete, compilable Android app.
-
-STEP 1: List every file needed (build files, manifest, Kotlin sources, resources)
-STEP 2: Generate COMPLETE code for every file
+Generate ALL files for a complete, compilable Android app.
 
 FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
 ===FILE:build.gradle.kts===
@@ -194,63 +219,56 @@ FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
 ===FILE:app/src/main/AndroidManifest.xml===
 [complete content]
 ===END===
-===FILE:app/src/main/java/com/example/${appName.sanitize()}/MainActivity.kt===
-[complete content]
-===END===
-... (continue for ALL files needed)
+... (all files needed)
 
 RULES:
-- Every file must have COMPLETE, working code - no placeholders, no TODOs
+- Every file must have COMPLETE, working code - no placeholders
 - Package: com.example.${appName.sanitize()}
 - Use Jetpack Compose with Material3
-- Build files must include all necessary plugins and dependencies
 - Min SDK 26, Target SDK 34, Compose compiler 1.5.10
-- Generate EVERY file needed for the app to compile
             """.trimIndent()
             
-            addMsg("📝 Generating all files...")
-            val response = model.generateContent(content { text(planPrompt) }).text ?: return "❌ No response from Gemini."
+            addMsg("📝 Generating files...")
+            val response = model.generateContent(content { text(planPrompt) }).text ?: return "❌ No response."
             recordModelUsage(selectModel())
             
-            // Step 2: Parse the response
             val files = parseFileResponse(response)
-            if (files.isEmpty()) return "❌ Could not parse files from response."
+            if (files.isEmpty()) return "❌ Could not parse files."
             addMsg("✅ Generated ${files.size} files")
             
-            // Step 3: Create repo and push everything
-            addMsg("📁 Creating GitHub repository...")
-            val createResult = apiCall("POST", "https://api.github.com/user/repos", token, """{"name":"$appName","private":false,"auto_init":false}""")
-            if (createResult.startsWith("❌")) return "❌ $createResult"
-            
-            val userResult = apiCall("GET", "https://api.github.com/user", token, null)
-            val owner = Regex("\"login\"\\s*:\\s*\"([^\"]+)\"").find(userResult)?.groupValues?.get(1) ?: return "❌ No username."
-            activeOwner = owner; activeRepo = appName
+            // Create repo if new app
+            if (existingContext == null) {
+                addMsg("📁 Creating GitHub repository...")
+                val createResult = apiCall("POST", "https://api.github.com/user/repos", token, """{"name":"$appName","private":false,"auto_init":false}""")
+                if (createResult.startsWith("❌")) return "❌ $createResult"
+                val userResult = apiCall("GET", "https://api.github.com/user", token, null)
+                val owner = Regex("\"login\"\\s*:\\s*\"([^\"]+)\"").find(userResult)?.groupValues?.get(1) ?: return "❌ No username."
+                activeOwner = owner; activeRepo = appName
+            }
             
             addMsg("📤 Pushing ${files.size} files...")
             var pushed = 0
             for ((path, content) in files) {
                 val encoded = android.util.Base64.encodeToString(content.toByteArray(), android.util.Base64.NO_WRAP)
-                if (!apiCall("PUT", "https://api.github.com/repos/$owner/$appName/contents/$path", token, """{"message":"Add $path","content":"$encoded"}""").startsWith("❌")) pushed++
+                val sha = if (existingContext != null) getFileSha(token, activeOwner, activeRepo, path) else null
+                val body = if (sha != null) """{"message":"Update $path","content":"$encoded","sha":"$sha"}""" else """{"message":"Add $path","content":"$encoded"}"""
+                if (!apiCall("PUT", "https://api.github.com/repos/$activeOwner/$activeRepo/contents/$path", token, body).startsWith("❌")) pushed++
             }
             
-            // Add CI workflow
-            addWorkflow(token, owner, appName, appName)
+            if (existingContext == null) addWorkflow(token, activeOwner, activeRepo, appName)
             addMsg("✅ Pushed $pushed/${files.size} files")
             
-            // Step 4: Trigger build
             addMsg("🔨 Triggering build...")
-            val runId = triggerWorkflow(token, owner, appName)
+            val runId = triggerWorkflow(token, activeOwner, activeRepo)
             if (runId != null) {
-                addMsg("🔗 Build: https://github.com/$owner/$appName/actions/runs/$runId")
-                addMsg("⏳ Monitoring build...")
-                val buildResult = monitorBuild(token, owner, appName, runId, key)
+                addMsg("🔗 Build: https://github.com/$activeOwner/$activeRepo/actions/runs/$runId")
+                val buildResult = monitorBuild(token, activeOwner, activeRepo, runId, key)
                 _state.value = _state.value.copy(isGeneratingApp = false)
                 return buildResult
             }
             
             _state.value = _state.value.copy(isGeneratingApp = false)
-            return "✅ App generated!\n📁 github.com/$owner/$appName\n📄 ${files.size} files\nUse 'compile repo $owner/$appName' to build."
-            
+            return "✅ App generated!\n📁 github.com/$activeOwner/$activeRepo\n📄 ${files.size} files"
         } catch (e: Exception) {
             _state.value = _state.value.copy(isGeneratingApp = false)
             return "❌ ${e.message}"
@@ -266,8 +284,19 @@ RULES:
         return files
     }
 
+    private suspend fun buildExistingContext(token: String, owner: String, repo: String, fileTree: List<String>): String {
+        val sb = StringBuilder()
+        for (path in fileTree.take(30)) {
+            try {
+                val content = readFileContent(token, owner, repo, path)
+                if (content != null) sb.append("===FILE:$path===\n${content.take(2000)}\n===END===\n")
+            } catch (e: Exception) { }
+        }
+        return sb.toString()
+    }
+
     // ═══════════════════════════════════════════
-    // SECTION 2.5: BUILD MONITORING
+    // SECTION 2.6: BUILD MONITORING
     // ═══════════════════════════════════════════
 
     private suspend fun monitorBuild(token: String, owner: String, repo: String, runId: Long, key: String): String {
@@ -284,8 +313,8 @@ RULES:
                 } else {
                     val logs = fetchLogs(token, owner, repo, runId)
                     val errors = extractErrors(logs)
-                    // Try to fix and retry
                     if (attempt < 3) {
+                        addMsg("🔧 Auto-fixing...")
                         val fixed = fixErrors(key, token, owner, repo, errors, logs)
                         if (fixed) {
                             val newRunId = triggerWorkflow(token, owner, repo)
@@ -302,7 +331,7 @@ RULES:
     private suspend fun fixErrors(key: String, token: String, owner: String, repo: String, errors: String, logs: String): Boolean {
         val model = GenerativeModel(selectModel(), key, generationConfig { temperature = 0.1f; maxOutputTokens = 60000 })
         return try {
-            val response = model.generateContent(content { text("Fix these build errors:\n$errors\n\nReturn fixed files in format:\n===FILE:path===\ncontent\n===END===") }).text
+            val response = model.generateContent(content { text("Fix these build errors:\n$errors\n\nReturn fixed files:\n===FILE:path===\ncontent\n===END===") }).text
             val text = response ?: return false
             recordModelUsage(selectModel())
             val files = parseFileResponse(text)
@@ -319,7 +348,7 @@ RULES:
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 2.6: GITHUB API HELPERS
+    // SECTION 2.7: GITHUB API HELPERS
     // ═══════════════════════════════════════════
 
     private suspend fun apiCall(method: String, url: String, token: String, body: String?): String = withContext(Dispatchers.IO) {
@@ -346,13 +375,21 @@ RULES:
 
     private suspend fun getFileSha(token: String, owner: String, repo: String, path: String): String? = withContext(Dispatchers.IO) { try { JSONObject(client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/contents/$path").header("Authorization", "Bearer $token").build()).execute().body?.string() ?: "{}").optString("sha", null) } catch (e: Exception) { null } }
 
+    private suspend fun getFileTree(token: String, owner: String, repo: String): List<String> = withContext(Dispatchers.IO) {
+        try { var r = client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/git/trees/main?recursive=1").header("Authorization", "Bearer $token").build()).execute(); if (!r.isSuccessful) r = client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/git/trees/master?recursive=1").header("Authorization", "Bearer $token").build()).execute(); if (r.isSuccessful) { val t = JSONObject(r.body?.string() ?: "{}").optJSONArray("tree") ?: return@withContext emptyList(); (0 until t.length()).map { t.getJSONObject(it).getString("path") } } else emptyList() } catch (e: Exception) { emptyList() }
+    }
+
+    private suspend fun readFileContent(token: String, owner: String, repo: String, path: String): String? = withContext(Dispatchers.IO) { try { val j = JSONObject(client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/contents/$path").header("Authorization", "Bearer $token").build()).execute().body?.string() ?: "{}"); val c = j.optString("content", ""); if (c.isNotBlank()) String(android.util.Base64.decode(c, android.util.Base64.DEFAULT)) else null } catch (e: Exception) { null } }
+
+    private suspend fun readFile(token: String, owner: String, repo: String, path: String): String = withContext(Dispatchers.IO) { try { val j = JSONObject(client.newCall(Request.Builder().url("https://api.github.com/repos/$owner/$repo/contents/$path").header("Authorization", "Bearer $token").build()).execute().body?.string() ?: "{}"); val c = j.optString("content", ""); if (c.isBlank()) return@withContext "📄 Empty"; val d = String(android.util.Base64.decode(c, android.util.Base64.DEFAULT)); if (d.length > 3000) "📄 $path:\n${d.take(3000)}..." else "📄 $path:\n$d" } catch (e: Exception) { "❌ ${e.message}" } }
+
     private suspend fun addWorkflow(token: String, owner: String, repo: String, name: String) {
         val yaml = "name: Build $name\non: [push, workflow_dispatch]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    timeout-minutes: 30\n    steps:\n      - uses: actions/checkout@v4\n      - name: Setup Gradle\n        run: |\n          if [ ! -f \"gradlew\" ]; then gradle wrapper --gradle-version 8.4; fi\n          chmod +x gradlew\n      - uses: actions/setup-java@v4\n        with: {java-version: '17', distribution: 'temurin'}\n      - uses: gradle/actions/setup-gradle@v3\n      - run: ./gradlew assembleDebug --no-daemon\n        env:\n          GRADLE_OPTS: \"-Dorg.gradle.jvmargs=-Xmx4g\"\n      - uses: actions/upload-artifact@v4\n        with: {name: ${name}-debug, path: app/build/outputs/apk/debug/app-debug.apk}"
         apiCall("PUT", "https://api.github.com/repos/$owner/$repo/contents/.github/workflows/build.yml", token, """{"message":"Add CI","content":"${android.util.Base64.encodeToString(yaml.toByteArray(), android.util.Base64.NO_WRAP)}"}""")
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 2.7: GEMINI CHAT
+    // SECTION 2.8: GEMINI CHAT
     // ═══════════════════════════════════════════
 
     private suspend fun chatWithGemini(input: String): String {
@@ -362,7 +399,7 @@ RULES:
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 2.8: UTILITY FUNCTIONS
+    // SECTION 2.9: UTILITY FUNCTIONS
     // ═══════════════════════════════════════════
 
     private fun addMsg(text: String) { _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage(text, false), generationProgress = text) }
@@ -373,4 +410,3 @@ RULES:
     private fun String.sanitize() = this.lowercase().replace(Regex("[^a-z0-9]"), "")
     private fun resolveApp(name: String): String? = when (name.lowercase()) { "whatsapp" -> "com.whatsapp"; "youtube" -> "com.google.android.youtube"; "chrome" -> "com.android.chrome"; "settings" -> "com.android.settings"; "camera" -> "com.android.camera"; "gmail" -> "com.google.android.gm"; "maps" -> "com.google.android.apps.maps"; else -> null }
 }
-    
