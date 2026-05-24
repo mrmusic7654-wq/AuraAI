@@ -106,24 +106,50 @@ class AgentViewModel @Inject constructor(private val preferences: AuraPreference
     fun send() { val msg = _state.value.input.trim(); if (msg.isBlank()) return; _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage(msg, true), input = "", loading = true); if (handleControl(msg)) return; taskJob = viewModelScope.launch { _state.value = _state.value.copy(isExecuting = true); saveMsg(msg, true); val r = execute(msg); _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage(r, false), loading = false, isExecuting = false, executionMode = ExecutionMode.IDLE); saveMsg(r, false) } }
 
     private fun handleControl(input: String): Boolean = when (input.lowercase().trim()) { "stop", "cancel" -> { taskJob?.cancel(); _state.value = _state.value.copy(loading = false, isExecuting = false, isGeneratingApp = false, buildLoop = null); true } else -> false }
+// ═══════════════════════════════════════════
+// SECTION 2.2: COMMAND ROUTER
+// ═══════════════════════════════════════════
 
-    // ═══════════════════════════════════════════
-    // SECTION 2.2: COMMAND ROUTER
-    // ═══════════════════════════════════════════
-
-    private suspend fun execute(input: String): String {
-        val lower = input.lowercase().trim()
-        if (lower == "device info") return "📱 ${Build.MODEL}\n🤖 ${Build.VERSION.RELEASE}"
-        if (lower == "time") return "🕐 ${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())}"
-        if (lower.startsWith("open ")) { val app = lower.removePrefix("open ").trim(); val pkg = resolveApp(app) ?: return "❌ Unknown app"; return try { val i = com.aura.ai.AuraApplication.instance.packageManager.getLaunchIntentForPackage(pkg); i?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); com.aura.ai.AuraApplication.instance.startActivity(i); "✅ Opened $app" } catch (e: Exception) { "❌ ${e.message}" } }
-        if (lower == "home") { val s = AuraAccessibilityService.instance; if (s != null) { s.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME); return "🏠 Home" } }
-        if (lower == "back") { val s = AuraAccessibilityService.instance; if (s != null) { s.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK); return "⬅️ Back" } }
-        if (lower == "screenshot") { val s = AuraAccessibilityService.instance; if (s != null) { s.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT); return "📸 Screenshot" } }
-        if (lower.startsWith("create app") || lower.startsWith("build app") || lower.startsWith("make app")) { if (lower.contains("repo")) return githubCommand(input); _state.value = _state.value.copy(executionMode = ExecutionMode.GENERATING_APP); return createApp(input) }
-        if (lower.startsWith("continue ")) { _state.value = _state.value.copy(executionMode = ExecutionMode.GENERATING_APP); return continueApp(input) }
-        if (lower.startsWith("codespace ")) { return codespaceCommand(lower) }
-        return githubCommand(input) ?: chatWithGemini(input)
+private suspend fun execute(input: String): String {
+    val lower = input.lowercase().trim()
+    if (lower == "device info") return "📱 ${Build.MODEL}\n🤖 ${Build.VERSION.RELEASE}"
+    if (lower == "time") return "🕐 ${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())}"
+    if (lower.startsWith("open ")) {
+        val app = lower.removePrefix("open ").trim()
+        val pkg = resolveApp(app) ?: return "❌ Unknown app"
+        return try {
+            val i = com.aura.ai.AuraApplication.instance.packageManager.getLaunchIntentForPackage(pkg)
+            i?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            com.aura.ai.AuraApplication.instance.startActivity(i)
+            "✅ Opened $app"
+        } catch (e: Exception) { "❌ ${e.message}" }
     }
+    if (lower == "home") {
+        val s = AuraAccessibilityService.instance
+        if (s != null) { s.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME); return "🏠 Home" }
+    }
+    if (lower == "back") {
+        val s = AuraAccessibilityService.instance
+        if (s != null) { s.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK); return "⬅️ Back" }
+    }
+    if (lower == "screenshot") {
+        val s = AuraAccessibilityService.instance
+        if (s != null) { s.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT); return "📸 Screenshot" }
+    }
+    if (lower.startsWith("create app") || lower.startsWith("build app") || lower.startsWith("make app")) {
+        if (lower.contains("repo")) return githubCommand(input) ?: "❌ No GitHub token."
+        _state.value = _state.value.copy(executionMode = ExecutionMode.GENERATING_APP)
+        return createApp(input)
+    }
+    if (lower.startsWith("continue ")) {
+        _state.value = _state.value.copy(executionMode = ExecutionMode.GENERATING_APP)
+        return continueApp(input)
+    }
+    if (lower.startsWith("codespace ")) {
+        return codespaceCommand(lower)
+    }
+    return githubCommand(input) ?: chatWithGemini(input)
+}
 
     // ═══════════════════════════════════════════
     // SECTION 2.3: CODESPACE COMMANDS
