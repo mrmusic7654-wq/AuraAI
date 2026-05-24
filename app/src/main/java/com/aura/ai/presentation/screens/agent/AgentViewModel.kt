@@ -152,7 +152,7 @@ class AgentViewModel @Inject constructor(private val preferences: AuraPreference
         return null
     }
 
-    // ═══════════════════════════════════════════
+        // ═══════════════════════════════════════════
     // SECTION 2.5: APP GENERATION
     // ═══════════════════════════════════════════
 
@@ -295,6 +295,7 @@ RULES:
         }
         return sb.toString()
     }
+            
 
     // ═══════════════════════════════════════════
     // SECTION 2.6: BUILD MONITORING
