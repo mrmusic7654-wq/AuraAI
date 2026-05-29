@@ -44,6 +44,10 @@ fun ProgressDashboard(viewModel: AgentViewModel) {
             // API calls
             StatusRow("📡 API Calls", "${state.totalApiCalls}", Color.White)
             
+            // Online status
+            StatusRow("📶 Status", if (state.isOnline) "Online" else "Offline", 
+                if (state.isOnline) Color(0xFF4CAF50) else Color(0xFFEF4444))
+            
             Spacer(modifier = Modifier.height(8.dp))
             
             LinearProgressIndicator(
