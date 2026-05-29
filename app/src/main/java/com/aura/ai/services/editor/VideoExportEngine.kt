@@ -67,7 +67,8 @@ class VideoExportEngine(private val context: Context) {
             }
             
             // Read frames (simplified - full implementation would decode/re-encode)
-            val bufferSize = 256 * 1024            val buffer = java.nio.ByteBuffer.allocate(bufferSize)
+         val bufferSize = 256 * 1024
+          val buffer = java.nio.ByteBuffer.allocate(bufferSize)
             
             var isEOS = false
             while (!isEOS) {
