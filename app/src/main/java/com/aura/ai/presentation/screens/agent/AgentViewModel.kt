@@ -442,14 +442,14 @@ class AgentViewModel @Inject constructor(
     // ═══════════════════════════════════════════
 
     fun startAutonomousMode() {
-        AuraForegroundService.startService(com.aura.ai.AuraApplication.instance)
+        AuraForegroundService.start(com.aura.ai.AuraApplication.instance)
         startHeartbeat()
         _state.value = _state.value.copy(isAutonomousMode = true)
         addMsg("🤖 Autonomous mode activated. I'll work until done.")
     }
 
     fun stopAutonomousMode() {
-        AuraForegroundService.stopService(com.aura.ai.AuraApplication.instance)
+        AuraForegroundService.stop(com.aura.ai.AuraApplication.instance)
         heartbeatJob?.cancel()
         _state.value = _state.value.copy(isAutonomousMode = false)
         addMsg("🔴 Autonomous mode deactivated.")
@@ -657,57 +657,62 @@ class AgentViewModel @Inject constructor(
     private fun extractAppName(text: String): String { Regex("create app (\\w+)").find(text)?.let { return it.groupValues[1].sanitize().take(50) }; return "MyApp" }
 
     // ═══════════════════════════════════════════
-    // SECTION 3.17: APP CONTROLLER
-    // ═══════════════════════════════════════════
-
-    private suspend fun debugWithApp(lower: String): String {
-        val s = AuraAccessibilityService.instance ?: return "❌ Accessibility not enabled."
-        _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("🔄 Working in background...", false))
-        viewModelScope.launch(Dispatchers.IO) {
-            val c = AppController(s); val app = lower.removePrefix("debug with ").removePrefix("ask ").split(" ").firstOrNull() ?: return@launch
-            val pkg = AppController.resolve(app) ?: return@launch; val err = _state.value.buildLoop?.errorSummary ?: ""
-            val resp = c.debug(pkg, err.ifBlank { "fix build errors" }); val fixes = parseFiles(resp)
-            if (fixes.isNotEmpty()) { val t = preferences.getGitHubToken() ?: return@launch; var a = 0; for ((p, c2) in fixes) { val enc = android.util.Base64.encodeToString(c2.toByteArray(), android.util.Base64.NO_WRAP); val sha = getFileSha(t, activeOwner, activeRepo, p); if (!apiCall("PUT", "https://api.github.com/repos/$activeOwner/$activeRepo/contents/$p", t, if (sha != null) """{"message":"Fix","content":"$enc","sha":"$sha"}""" else """{"message":"Add","content":"$enc"}""").startsWith("❌")) a++ }
-                withContext(Dispatchers.Main) { addMsg("✅ Applied $a fixes from $app") } }
-        }
-        return "🔄 Working with $app in background... Check messages for updates."
-    }
-
-    private suspend fun controlApp(input: String): String {
-        val s = AuraAccessibilityService.instance ?: return "❌ Accessibility not enabled."
-        val c = AppController(s); val parts = input.removePrefix("control ").split(" and "); val app = parts.firstOrNull()?.trim() ?: return "❌ Specify app."
-        val pkg = AppController.resolve(app) ?: return "❌ Unknown app: $app"
-        val steps = parts.drop(1).map { when { it.contains("tap") -> AppController.AppStep("tap", it.removePrefix("tap ").trim()); it.contains("type") -> AppController.AppStep("type", it.removePrefix("type ").trim()); it.contains("swipe") -> AppController.AppStep("swipe", if (it.contains("up")) "up" else "down"); it.contains("read") -> AppController.AppStep("read"); else -> AppController.AppStep("wait", "", 3000) } }
-        return c.execute(pkg, steps)
-    }
-
-    private suspend fun sendToApp(input: String): String {
-        val s = AuraAccessibilityService.instance ?: return "❌ Accessibility not enabled."
-        val c = AppController(s); val parts = input.removePrefix("send to ").split(":", limit = 2)
-        if (parts.size < 2) return "❌ Format: send to [app]: [message]"
-        return c.sendMessage(AppController.resolve(parts[0].trim()) ?: return "❌ Unknown app.", parts[1].trim())
-    }
-
-    private suspend fun analyzeScreenCmd(lower: String): String {
-        val s = AuraAccessibilityService.instance ?: return "❌ Accessibility not enabled."
-        val k = preferences.getApiKey() ?: return "❌ No Gemini API key."
-        val prompt = when { lower.contains("read") -> "Read all visible text on this screen"; lower.contains("describe") -> "Describe what you see in detail"; else -> "What UI elements and text are visible?" }
-        addMsg("📸 Capturing and analyzing screen...")
-        return "📸 Screen Analysis:\n${AppController(s).analyzeScreen(k, prompt)}"
-    }
-
-    private suspend fun askGeminiApp(input: String): String {
-        val s = AuraAccessibilityService.instance ?: return "❌ Accessibility not enabled."
-        val prompt = input.removePrefix("ask gemini app").removePrefix("gemini native").trim()
-        _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("🔄 Opening Gemini app...", false))
-        viewModelScope.launch(Dispatchers.IO) {
+     private suspend fun debugWithApp(lower: String): String {
+    val s = AuraAccessibilityService.instance ?: return "❌ Accessibility not enabled."
+    val app = lower.removePrefix("debug with ").removePrefix("ask ").split(" ").firstOrNull() ?: return "❌"
+    val pkg = AppController.resolve(app) ?: return "❌ Unknown app: $app"
+    _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("🔄 Opening $app...", false))
+    viewModelScope.launch(Dispatchers.IO) {
+        try {
             val c = AppController(s)
-            val resp = c.sendMessage("com.google.android.apps.bard", prompt)
-            withContext(Dispatchers.Main) { addMsg("📱 Gemini response:\n${resp.take(2000)}") }
+            val err = _state.value.buildLoop?.errorSummary ?: "No error logs"
+            val result = c.sendMessage(pkg, "Fix: $err")
+            withContext(Dispatchers.Main) { addMsg("📱 $app: ${result.take(2000)}") }
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) { addMsg("❌ ${e.message}") }
         }
-        return "🔄 Working with Gemini app in background..."
     }
+    return "🔄 Working..."
+}
 
+private suspend fun controlApp(input: String): String {
+    val s = AuraAccessibilityService.instance ?: return "❌"
+    val parts = input.removePrefix("control ").split(" and ")
+    val pkg = AppController.resolve(parts.firstOrNull()?.trim() ?: return "❌") ?: return "❌"
+    val c = AppController(s)
+    val steps = parts.drop(1).map {
+        when {
+            it.contains("tap") -> AppController.AppStep("tap", it.removePrefix("tap ").trim())
+            it.contains("type") -> AppController.AppStep("type", it.removePrefix("type ").trim())
+            it.contains("swipe") -> AppController.AppStep("swipe", if (it.contains("up")) "up" else "down")
+            it.contains("read") -> AppController.AppStep("read")
+            else -> AppController.AppStep("wait", "", 3000)
+        }
+    }
+    return c.execute(pkg, steps)
+}
+
+private suspend fun sendToApp(input: String): String {
+    val s = AuraAccessibilityService.instance ?: return "❌"
+    val parts = input.removePrefix("send to ").split(":", limit = 2)
+    if (parts.size < 2) return "❌ Format: send to [app]: [message]"
+    return AppController(s).sendMessage(AppController.resolve(parts[0].trim()) ?: return "❌", parts[1].trim())
+}
+
+private suspend fun analyzeScreenCmd(lower: String): String {
+    val s = AuraAccessibilityService.instance ?: return "❌"
+    val k = preferences.getApiKey() ?: return "❌"
+    return "📸 ${AppController(s).analyzeScreen(k, "Describe this screen")}"
+}
+
+private suspend fun askGeminiApp(input: String): String {
+    val s = AuraAccessibilityService.instance ?: return "❌"
+    val prompt = input.removePrefix("ask gemini app").removePrefix("gemini native").trim()
+    viewModelScope.launch(Dispatchers.IO) {
+        AppController(s).sendMessage("com.google.android.apps.bard", prompt)
+    }
+    return "🔄 Working..."
+}
     // ═══════════════════════════════════════════
     // SECTION 3.18: GEMINI CHAT WITH MEMORY
     // ═══════════════════════════════════════════
