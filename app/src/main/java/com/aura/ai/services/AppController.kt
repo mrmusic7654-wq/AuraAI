@@ -9,7 +9,6 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.google.ai.client.generativeai.type.generationConfig
-import com.google.ai.client.generativeai.type.image
 import kotlinx.coroutines.*
 
 class AppController(private val service: AccessibilityService) {
@@ -192,7 +191,7 @@ $errorLogs""".trimIndent()
     // CORE ACTIONS
     // ═══════════════════════════════════════════
     
-    private fun openApp(packageName: String) {
+    fun openApp(packageName: String) {
         val intent = service.context.packageManager.getLaunchIntentForPackage(packageName)
         intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         service.context.startActivity(intent)
