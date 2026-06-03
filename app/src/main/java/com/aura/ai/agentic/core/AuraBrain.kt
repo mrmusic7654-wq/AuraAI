@@ -1,6 +1,6 @@
  package com.aura.ai.agentic.core
 
-import com.aura.ai.agentic.memory.Consciousness
+import com.aura.ai.agentic.core.Consciousness
 import com.aura.ai.agentic.memory.ExperienceBuffer
 import com.aura.ai.agentic.memory.KnowledgeGraph
 import com.aura.ai.agentic.memory.PatternRecognizer
