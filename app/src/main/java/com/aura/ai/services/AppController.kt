@@ -42,11 +42,11 @@ class AppController(private val service: AccessibilityService) {
     // PUBLIC METHODS (called by other files)
     // ═══════════════════════════════════════════
     
-    fun openApp(packageName: String) {
-        val intent = service.context.packageManager.getLaunchIntentForPackage(packageName)
-        intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        service.context.startActivity(intent)
-    }
+   fun openApp(packageName: String) {
+    val intent = service.context.packageManager.getLaunchIntentForPackage(packageName)
+    intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    service.context.startActivity(intent)
+   }
     
     suspend fun execute(app: String, steps: List<AppStep>): String {
         openApp(app)
