@@ -70,10 +70,9 @@ class AppController(private val service: AccessibilityService) {
      */
     fun openApp(packageName: String) {
         val intent = service.context.packageManager.getLaunchIntentForPackage(packageName)
-        intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        service.context.startActivity(intent)
+intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+service.context.startActivity(intent)
     }
-    
     /**
      * Executes a sequence of actions on an app
      */
@@ -136,7 +135,7 @@ class AppController(private val service: AccessibilityService) {
     /**
      * Reads all visible text from the screen
      */
-    fun readScreen(): String {
+    fun read(): String {
         val root = service.rootInActiveWindow ?: return ""
         val text = collectAllText(root)
         root.recycle()
