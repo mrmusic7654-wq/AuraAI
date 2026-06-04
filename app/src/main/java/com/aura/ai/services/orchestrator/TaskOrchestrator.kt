@@ -145,6 +145,11 @@ class TaskOrchestrator(
     }
     
     fun pause() { taskJob?.cancel() }
-    fun resume() { _currentTask.value?.let { executePlan(it.taskPlan) } }
-    fun cancel() { taskJob?.cancel(); stateManager.clearState(); _currentTask.value = null }
+fun resume() { 
+    _currentTask.value?.let { taskState ->
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { 
+            executePlan(taskState.taskPlan) 
+        }
+    }
 }
+fun cancel() { taskJob?.cancel(); stateManager.clearState(); _currentTask.value = null }
