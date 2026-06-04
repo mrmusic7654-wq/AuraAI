@@ -30,10 +30,7 @@ class AppController(private val service: AccessibilityService) {
             "youtube" to "com.google.android.youtube",
             "chrome" to "com.android.chrome",
             "gmail" to "com.google.android.gm",
-            "settings" to "com.android.settings",
-            "calculator" to "com.android.calculator2",
-            "calendar" to "com.android.calendar",
-            "files" to "com.android.documentsui"
+            "settings" to "com.android.settings"
         )
         
         fun resolve(name: String): String? {
@@ -42,8 +39,14 @@ class AppController(private val service: AccessibilityService) {
     }
     
     // ═══════════════════════════════════════════
-    // PUBLIC METHODS
+    // PUBLIC METHODS (called by other files)
     // ═══════════════════════════════════════════
+    
+    fun openApp(packageName: String) {
+        val intent = service.context.packageManager.getLaunchIntentForPackage(packageName)
+        intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        service.context.startActivity(intent)
+    }
     
     suspend fun execute(app: String, steps: List<AppStep>): String {
         openApp(app)
@@ -59,8 +62,6 @@ class AppController(private val service: AccessibilityService) {
                     "wait" -> delay(s.waitMs)
                     "back" -> service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
                     "home" -> service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
-                    "recents" -> service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS)
-                    "notifications" -> service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS)
                 }
                 delay(s.waitMs)
             } catch (e: Exception) { return "Step ${i+1} failed: ${e.message}" }
@@ -76,7 +77,7 @@ class AppController(private val service: AccessibilityService) {
     }
     
     suspend fun debug(app: String, error: String): String {
-        return sendMessage(app, "Fix this Android build error. Return fixed code as:\n===FILE:path===\ncode\n===END===\n\nError:\n$error")
+        return sendMessage(app, "Fix this build error:\n$error")
     }
     
     suspend fun waitForResponse(timeout: Int = 120): String {
@@ -93,10 +94,9 @@ class AppController(private val service: AccessibilityService) {
     }
     
     suspend fun analyzeScreen(apiKey: String, prompt: String): String {
-        val bmp = takeScreenshot() ?: return "Screenshot unavailable. Screen text:\n${read().take(2000)}"
-        val model = GenerativeModel("gemini-2.5-flash", apiKey, generationConfig { maxOutputTokens = 60000 })
         return try {
-            model.generateContent(content { text(prompt) }).text ?: "No response"
+            val model = GenerativeModel("gemini-2.5-flash", apiKey, generationConfig { maxOutputTokens = 60000 })
+            model.generateContent(content { text("Screen text: ${read().take(3000)}\n\n$prompt") }).text ?: "No response"
         } catch (e: Exception) { "Error: ${e.message}" }
     }
     
@@ -132,9 +132,7 @@ class AppController(private val service: AccessibilityService) {
     private fun tap(text: String) {
         val root = service.rootInActiveWindow ?: return
         findNode(root, text)?.let {
-            val r = Rect()
-            it.getBoundsInScreen(r)
-            it.recycle()
+            val r = Rect(); it.getBoundsInScreen(r); it.recycle()
             tapAt(r.centerX().toFloat(), r.centerY().toFloat())
         }
         root.recycle()
