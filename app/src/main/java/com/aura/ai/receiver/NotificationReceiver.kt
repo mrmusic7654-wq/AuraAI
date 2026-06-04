@@ -24,7 +24,7 @@ class NotificationReceiver : BroadcastReceiver() {
     
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
-            AuraForegroundService.ACTION_STOP -> {
+            AuraForegroundService.Companion.ACTION_STOP -> {
                 AuraForegroundService.stop(context)
             }
             ACTION_HEARTBEAT -> {
