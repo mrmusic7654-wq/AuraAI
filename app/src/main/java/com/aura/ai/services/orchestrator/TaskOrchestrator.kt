@@ -72,7 +72,7 @@ class TaskOrchestrator(
         var updatedState = state.copy(startedAt = System.currentTimeMillis(), overallStatus = "RUNNING")
         
         for (i in state.currentStepIndex until state.taskPlan.steps.size) {
-            if (!isActive) {
+            if (!kotlinx.coroutines.currentCoroutineContext().isActive) {
                 updatedState = updatedState.copy(overallStatus = "PAUSED", pausedAt = System.currentTimeMillis())
                 stateManager.saveState(updatedState)
                 return
