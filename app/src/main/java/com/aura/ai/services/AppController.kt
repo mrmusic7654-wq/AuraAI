@@ -36,160 +36,87 @@ class AppController(private val service: AccessibilityService) {
             "files" to "com.android.documentsui"
         )
         
-        fun resolveApp(name: String): String? {
+        fun resolve(name: String): String? {
             return SUPPORTED_APPS[name.lowercase()] ?: name
         }
     }
     
     // ═══════════════════════════════════════════
-    // HIGH-LEVEL OPERATIONS
+    // PUBLIC METHODS
     // ═══════════════════════════════════════════
     
-    suspend fun executeActions(appPackage: String, steps: List<AppStep>): String {
-        openApp(appPackage)
+    suspend fun execute(app: String, steps: List<AppStep>): String {
+        openApp(app)
         delay(2000)
-        
-        var result = ""
-        for ((index, step) in steps.withIndex()) {
+        var r = ""
+        for ((i, s) in steps.withIndex()) {
             try {
-                when (step.action) {
-                    "tap" -> tapOnText(step.target)
-                    "type" -> typeText(step.target)
-                    "swipe" -> performSwipe(step.target == "up")
-                    "scroll" -> performSwipe(step.target == "up")
-                    "read" -> result = readScreen()
-                    "wait" -> delay(step.waitMs)
+                when (s.action) {
+                    "tap" -> tap(s.target)
+                    "type" -> type(s.target)
+                    "swipe" -> swipe(s.target == "up")
+                    "read" -> r = read()
+                    "wait" -> delay(s.waitMs)
                     "back" -> service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
                     "home" -> service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
                     "recents" -> service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS)
                     "notifications" -> service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS)
                 }
-                delay(step.waitMs)
-            } catch (e: Exception) {
-                return "Step ${index + 1} failed: ${e.message}"
-            }
+                delay(s.waitMs)
+            } catch (e: Exception) { return "Step ${i+1} failed: ${e.message}" }
         }
-        
-        return result
+        return r
     }
     
-    suspend fun sendMessageToApp(appPackage: String, message: String): String {
-        return executeActions(appPackage, listOf(
-            AppStep("tap", "Message"),
-            AppStep("type", message),
-            AppStep("tap", "Send"),
-            AppStep("wait", "", 5000),
-            AppStep("read")
+    suspend fun sendMessage(app: String, msg: String): String {
+        return execute(app, listOf(
+            AppStep("tap","Message"), AppStep("type",msg), AppStep("tap","Send"),
+            AppStep("wait","",5000), AppStep("read")
         ))
     }
     
-    suspend fun debugWithApp(appPackage: String, errorLogs: String): String {
-        val prompt = """Fix this Android build error. Return ONLY the corrected code in this format:
-===FILE:exact/file/path.kt===
-[complete corrected code]
-===END===
-
-BUILD ERROR:
-$errorLogs""".trimIndent()
-        
-        return sendMessageToApp(appPackage, prompt)
+    suspend fun debug(app: String, error: String): String {
+        return sendMessage(app, "Fix this Android build error. Return fixed code as:\n===FILE:path===\ncode\n===END===\n\nError:\n$error")
     }
     
-    // ═══════════════════════════════════════════
-    // SCREEN ANALYSIS
-    // ═══════════════════════════════════════════
-    
-    suspend fun analyzeScreenWithGemini(apiKey: String, prompt: String): String {
-        val bitmap = captureScreenshot()
-        if (bitmap == null) {
-            // Fallback to text reading
-            val screenText = readScreen()
-            return "📱 Screen text (screenshot unavailable):\n${screenText.take(2000)}"
-        }
-        
-        val model = GenerativeModel(
-            "gemini-2.5-flash",
-            apiKey,
-            generationConfig { maxOutputTokens = 60000 }
-        )
-        
-        return try {
-            val response = model.generateContent(
-                content {
-                    image(bitmap)
-                    text(prompt)
-                }
-            ).text ?: "No response from Gemini"
-            response
-        } catch (e: Exception) {
-            "Screen analysis error: ${e.message}"
-        }
-    }
-    
-    private fun captureScreenshot(): Bitmap? {
-        return try {
-            service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT)
-            null // Screenshot saved to gallery, not returned as bitmap
-        } catch (e: Exception) {
-            null
-        }
-    }
-    
-    // ═══════════════════════════════════════════
-    // SMART WAITING
-    // ═══════════════════════════════════════════
-    
-    suspend fun waitForResponse(timeoutSeconds: Int = 120): String {
-        var lastText = ""
-        val startTime = System.currentTimeMillis()
-        
-        while (System.currentTimeMillis() - startTime < timeoutSeconds * 1000L) {
+    suspend fun waitForResponse(timeout: Int = 120): String {
+        var last = ""
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < timeout * 1000L) {
             delay(3000)
-            val currentText = readScreen()
-            
-            // Check if response stabilized
-            if (currentText == lastText && currentText.isNotEmpty()) {
-                delay(2000)
-                return readScreen()
-            }
-            
-            // Check for completion indicators
-            if (currentText.contains("Copy") || 
-                currentText.contains("Regenerate") ||
-                currentText.contains("👍") ||
-                currentText.contains("Thumbs up")) {
-                return currentText
-            }
-            
-            lastText = currentText
+            val cur = read()
+            if (cur == last && cur.isNotEmpty()) { delay(2000); return read() }
+            if (cur.contains("Copy") || cur.contains("Regenerate")) return cur
+            last = cur
         }
-        
-        return readScreen()
+        return read()
     }
     
-    suspend fun waitForAppToOpen(packageName: String, timeoutSeconds: Int = 10): Boolean {
-        val startTime = System.currentTimeMillis()
-        while (System.currentTimeMillis() - startTime < timeoutSeconds * 1000L) {
-            if (isAppOpen(packageName)) return true
-            delay(1000)
-        }
-        return false
+    suspend fun analyzeScreen(apiKey: String, prompt: String): String {
+        val bmp = takeScreenshot() ?: return "Screenshot unavailable. Screen text:\n${read().take(2000)}"
+        val model = GenerativeModel("gemini-2.5-flash", apiKey, generationConfig { maxOutputTokens = 60000 })
+        return try {
+            model.generateContent(content { text(prompt) }).text ?: "No response"
+        } catch (e: Exception) { "Error: ${e.message}" }
     }
     
-    fun isAppOpen(packageName: String): Boolean {
-        return getCurrentAppPackage() == packageName
-    }
-    
-    fun getCurrentAppPackage(): String {
+    fun getCurrentApp(): String {
         val root = service.rootInActiveWindow ?: return "unknown"
         val pkg = root.packageName?.toString() ?: "unknown"
         root.recycle()
         return pkg
     }
     
-    // ═══════════════════════════════════════════
-    // CORE ACTIONS
-    // ═══════════════════════════════════════════
+    fun isAppOpen(pkg: String): Boolean = getCurrentApp() == pkg
+    
+    suspend fun waitForApp(pkg: String, timeout: Int = 10): Boolean {
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < timeout * 1000L) {
+            if (isAppOpen(pkg)) return true
+            delay(1000)
+        }
+        return false
+    }
     
     fun openApp(packageName: String) {
         val intent = service.context.packageManager.getLaunchIntentForPackage(packageName)
@@ -197,92 +124,80 @@ $errorLogs""".trimIndent()
         service.context.startActivity(intent)
     }
     
-    private fun tapOnText(text: String) {
-        val root = service.rootInActiveWindow ?: return
-        val node = findNodeByText(root, text)
-        if (node != null) {
-            val rect = Rect()
-            node.getBoundsInScreen(rect)
-            node.recycle()
-            performTap(rect.centerX().toFloat(), rect.centerY().toFloat())
-        }
-        root.recycle()
-    }
-    
-    private fun typeText(text: String) {
-        val root = service.rootInActiveWindow ?: return
-        val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-        if (focused != null) {
-            val args = Bundle().apply {
-                putCharSequence(
-                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                    text
-                )
-            }
-            focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-            focused.recycle()
-        }
-        root.recycle()
-    }
-    
-    private fun performTap(x: Float, y: Float) {
-        val path = android.graphics.Path().apply { moveTo(x, y) }
-        val gesture = android.accessibilityservice.GestureDescription.Builder()
-            .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 1))
-            .build()
-        service.dispatchGesture(gesture, null, null)
-    }
-    
-    private fun performSwipe(up: Boolean) {
-        val display = service.resources.displayMetrics
-        val startY = if (up) display.heightPixels * 0.8f else display.heightPixels * 0.2f
-        val endY = if (up) display.heightPixels * 0.2f else display.heightPixels * 0.8f
-        val x = display.widthPixels / 2f
-        
-        val path = android.graphics.Path().apply {
-            moveTo(x, startY)
-            lineTo(x, endY)
-        }
-        val gesture = android.accessibilityservice.GestureDescription.Builder()
-            .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 300))
-            .build()
-        service.dispatchGesture(gesture, null, null)
-    }
-    
-    private fun readScreen(): String {
+    fun read(): String {
         val root = service.rootInActiveWindow ?: return ""
-        val text = collectAllText(root)
+        val t = collect(root)
         root.recycle()
-        return text
+        return t
     }
     
-    private fun collectAllText(node: AccessibilityNodeInfo): String {
-        val sb = StringBuilder()
-        if (node.text?.isNotBlank() == true && node.text.length > 3) {
-            sb.appendLine(node.text)
+    // ═══════════════════════════════════════════
+    // PRIVATE HELPERS
+    // ═══════════════════════════════════════════
+    
+    private fun tap(text: String) {
+        val root = service.rootInActiveWindow ?: return
+        findNode(root, text)?.let {
+            val r = Rect()
+            it.getBoundsInScreen(r)
+            it.recycle()
+            tapAt(r.centerX().toFloat(), r.centerY().toFloat())
         }
-        for (i in 0 until node.childCount) {
-            node.getChild(i)?.let { child ->
-                sb.append(collectAllText(child))
-                child.recycle()
-            }
+        root.recycle()
+    }
+    
+    private fun type(text: String) {
+        val root = service.rootInActiveWindow ?: return
+        root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.let {
+            val a = Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text) }
+            it.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, a)
+            it.recycle()
+        }
+        root.recycle()
+    }
+    
+    private fun swipe(up: Boolean) {
+        val d = service.resources.displayMetrics
+        val s = if (up) d.heightPixels*0.8f else d.heightPixels*0.2f
+        val e = if (up) d.heightPixels*0.2f else d.heightPixels*0.8f
+        val p = android.graphics.Path().apply { moveTo(d.widthPixels/2f, s); lineTo(d.widthPixels/2f, e) }
+        service.dispatchGesture(
+            android.accessibilityservice.GestureDescription.Builder()
+                .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(p, 0, 300))
+                .build(), null, null
+        )
+    }
+    
+    private fun tapAt(x: Float, y: Float) {
+        val p = android.graphics.Path().apply { moveTo(x, y) }
+        service.dispatchGesture(
+            android.accessibilityservice.GestureDescription.Builder()
+                .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(p, 0, 1))
+                .build(), null, null
+        )
+    }
+    
+    private fun collect(n: AccessibilityNodeInfo): String {
+        val sb = StringBuilder()
+        if (n.text?.isNotBlank() == true && n.text.length > 3) sb.appendLine(n.text)
+        for (i in 0 until n.childCount) {
+            n.getChild(i)?.let { sb.append(collect(it)); it.recycle() }
         }
         return sb.toString()
     }
     
-    private fun findNodeByText(
-        node: AccessibilityNodeInfo,
-        text: String
-    ): AccessibilityNodeInfo? {
-        if (node.text?.contains(text, ignoreCase = true) == true ||
-            node.contentDescription?.contains(text, ignoreCase = true) == true) {
-            return node
-        }
-        for (i in 0 until node.childCount) {
-            node.getChild(i)?.let { child ->
-                findNodeByText(child, text)?.let { return it }
-            }
+    private fun findNode(n: AccessibilityNodeInfo, t: String): AccessibilityNodeInfo? {
+        if (n.text?.contains(t, true) == true || n.contentDescription?.contains(t, true) == true) return n
+        for (i in 0 until n.childCount) {
+            n.getChild(i)?.let { findNode(it, t)?.let { return it } }
         }
         return null
+    }
+    
+    private fun takeScreenshot(): Bitmap? {
+        return try {
+            service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT)
+            null
+        } catch (e: Exception) { null }
     }
 }
