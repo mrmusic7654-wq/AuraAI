@@ -647,8 +647,11 @@ class AgentViewModel @Inject constructor(
         _state.value = _state.value.copy(executionMode = ExecutionMode.ZIP_PROCESSING)
         addMsg("📦 Processing ZIP...")
         val zp = ZipProcessor(com.aura.ai.AuraApplication.instance); val archive = zp.processChatZip(uri)
-        addMsg("📝 Found ${archive.codeBlocks.size} code blocks"); val files = zp.mapCodeBlocksToFiles(archive.codeBlocks)
-        addMsg("📁 Mapped to ${files.size} files"); val name = extractAppName(archive.fullText)
+        val archiveData = archive.archive ?: return "❌ No data extracted"
+addMsg("📝 Found ${archiveData.codeBlocks.size} code blocks")
+val files = zp.mapCodeBlocksToFiles(archiveData.codeBlocks)
+addMsg("📁 Mapped to ${files.size} files")
+val name = extractAppName(archiveData.fullText)
         addMsg("📁 Creating repo: $name"); val cr = apiCall("POST", "https://api.github.com/user/repos", t, """{"name":"$name","private":false,"auto_init":false}"""); if (cr.startsWith("❌")) return "❌ $cr"
         val ur = apiCall("GET", "https://api.github.com/user", t, null); activeOwner = Regex("\"login\"\\s*:\\s*\"([^\"]+)\"").find(ur)?.groupValues?.get(1) ?: return "❌ No username."; activeRepo = name
         return pushAndBuild(t, k, name, files, false)
