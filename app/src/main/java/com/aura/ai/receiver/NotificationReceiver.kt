@@ -6,41 +6,38 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import com.aura.ai.R
-import com.aura.ai.services.AuraForegroundService
 
 class NotificationReceiver : BroadcastReceiver() {
     
-    companion object {
-        const val ACTION_HEARTBEAT = "com.aura.ai.HEARTBEAT"
-        const val ACTION_TASK_DONE = "com.aura.ai.TASK_DONE"
-        const val ACTION_ERROR = "com.aura.ai.ERROR"
-    }
-    
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
-            AuraForegroundService.ACTION_STOP -> {
-                AuraForegroundService.stop(context)
+            "STOP_SERVICE" -> {
+                val serviceIntent = Intent(context, com.aura.ai.services.AuraForegroundService::class.java)
+                serviceIntent.action = "STOP_SERVICE"
+                context.startService(serviceIntent)
             }
-            ACTION_HEARTBEAT -> {
-                showNotification(context, "🟢 Aura Active", "Autonomous mode running")
+            "HEARTBEAT" -> {
+                showNotification(context, "Aura Active", "Running")
             }
-            ACTION_TASK_DONE -> {
-                showNotification(context, "✅ Task Complete", intent.getStringExtra("msg") ?: "Done")
+            "TASK_DONE" -> {
+                showNotification(context, "Task Complete", intent.getStringExtra("msg") ?: "Done")
             }
-            ACTION_ERROR -> {
-                showNotification(context, "❌ Error", intent.getStringExtra("msg") ?: "Unknown error")
+            "ERROR" -> {
+                showNotification(context, "Error", intent.getStringExtra("msg") ?: "Unknown")
             }
         }
     }
     
     private fun showNotification(context: Context, title: String, message: String) {
-        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val notification = NotificationCompat.Builder(context, AuraForegroundService.CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(message)
-            .setSmallIcon(R.drawable.ic_aura_logo)
-            .setAutoCancel(true)
-            .build()
-        nm.notify((System.currentTimeMillis() % 10000).toInt(), notification)
+        try {
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val notification = NotificationCompat.Builder(context, "aura_notifications")
+                .setContentTitle(title)
+                .setContentText(message)
+                .setSmallIcon(R.drawable.ic_aura_logo)
+                .setAutoCancel(true)
+                .build()
+            nm.notify((System.currentTimeMillis() % 10000).toInt(), notification)
+        } catch (e: Exception) { }
     }
 }
