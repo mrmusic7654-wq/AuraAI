@@ -28,8 +28,11 @@ class AppBehaviorLearner(context: Context) {
     
     fun recordTap(packageName: String, x: Float, y: Float, screenContext: String) {
         val current = behaviors.getOrPut(packageName) { LearnedBehavior(packageName) }
-        val pattern = current.tapPatterns.getOrPut(screenContext.take(50)) { mutableListOf() }
-        (pattern as MutableList).add(TapRecord(x, y, screenContext, System.currentTimeMillis()))
+val mutablePatterns = current.tapPatterns.toMutableMap()
+val existingList = mutablePatterns.getOrPut(screenContext.take(50)) { mutableListOf<TapRecord>() }.toMutableList()
+existingList.add(TapRecord(x, y, screenContext, System.currentTimeMillis()))
+mutablePatterns[screenContext.take(50)] = existingList
+behaviors[packageName] = current.copy(tapPatterns = mutablePatterns)
         if (pattern.size > 10) (pattern as MutableList).removeAt(0)
         saveBehaviors()
     }
