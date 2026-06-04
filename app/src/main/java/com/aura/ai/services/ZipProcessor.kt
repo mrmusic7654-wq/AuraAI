@@ -30,8 +30,7 @@ class ZipProcessor(private val context: Context) {
                 if (name.endsWith(".txt") || name.endsWith(".md") || 
                     name.endsWith(".html") || name.endsWith(".htm") ||
                     name.endsWith(".json")) {
-                    fullText.append(zipStream.bufferedReader().readText())
-                    fullText.append("\n\n")
+                    zipStream.bufferedReader()?.use { reader -> fullText.append(reader.readText()).append("\n\n") }
                 }
             }
             zipStream.closeEntry()
