@@ -118,12 +118,6 @@ class AppController(private val service: AccessibilityService) {
         return false
     }
     
-    fun openApp(packageName: String) {
-        val intent = service.context.packageManager.getLaunchIntentForPackage(packageName)
-        intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        service.context.startActivity(intent)
-    }
-    
     fun read(): String {
         val root = service.rootInActiveWindow ?: return ""
         val t = collect(root)
