@@ -658,19 +658,14 @@ class AgentViewModel @Inject constructor(
 
     // ═══════════════════════════════════════════
      private suspend fun debugWithApp(lower: String): String {
-    val s = AuraAccessibilityService.instance ?: return "❌ Accessibility not enabled."
+    val s = AuraAccessibilityService.instance ?: return "❌"
     val app = lower.removePrefix("debug with ").removePrefix("ask ").split(" ").firstOrNull() ?: return "❌"
-    val pkg = AppController.resolve(app) ?: return "❌ Unknown app: $app"
-    _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("🔄 Opening $app...", false))
+    val pkg = AppController.resolve(app) ?: return "❌"
+    _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("🔄 Working...", false))
     viewModelScope.launch(Dispatchers.IO) {
-        try {
-            val c = AppController(s)
-            val err = _state.value.buildLoop?.errorSummary ?: "No error logs"
-            val result = c.sendMessage(pkg, "Fix: $err")
-            withContext(Dispatchers.Main) { addMsg("📱 $app: ${result.take(2000)}") }
-        } catch (e: Exception) {
-            withContext(Dispatchers.Main) { addMsg("❌ ${e.message}") }
-        }
+        val c = AppController(s)
+        val result = c.sendMessage(pkg, "Fix errors")
+        withContext(Dispatchers.Main) { addMsg("📱 $result") }
     }
     return "🔄 Working..."
 }
@@ -695,22 +690,19 @@ private suspend fun controlApp(input: String): String {
 private suspend fun sendToApp(input: String): String {
     val s = AuraAccessibilityService.instance ?: return "❌"
     val parts = input.removePrefix("send to ").split(":", limit = 2)
-    if (parts.size < 2) return "❌ Format: send to [app]: [message]"
+    if (parts.size < 2) return "❌"
     return AppController(s).sendMessage(AppController.resolve(parts[0].trim()) ?: return "❌", parts[1].trim())
 }
 
 private suspend fun analyzeScreenCmd(lower: String): String {
     val s = AuraAccessibilityService.instance ?: return "❌"
     val k = preferences.getApiKey() ?: return "❌"
-    return "📸 ${AppController(s).analyzeScreen(k, "Describe this screen")}"
+    return AppController(s).analyzeScreen(k, "Describe screen")
 }
 
 private suspend fun askGeminiApp(input: String): String {
     val s = AuraAccessibilityService.instance ?: return "❌"
-    val prompt = input.removePrefix("ask gemini app").removePrefix("gemini native").trim()
-    viewModelScope.launch(Dispatchers.IO) {
-        AppController(s).sendMessage("com.google.android.apps.bard", prompt)
-    }
+    viewModelScope.launch(Dispatchers.IO) { AppController(s).sendMessage("com.google.android.apps.bard", input.removePrefix("ask gemini app").trim()) }
     return "🔄 Working..."
 }
     // ═══════════════════════════════════════════
