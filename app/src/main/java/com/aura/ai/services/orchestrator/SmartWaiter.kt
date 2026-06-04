@@ -12,7 +12,7 @@ class SmartWaiter(private val appController: AppController) {
                 delay(3000); val cur = appController.read()
                 if (cur != last) { stable = 0; last = cur }
                 else if (cur.isNotEmpty()) { stable++; if (stable >= 3) return@withTimeoutOrNull cur }
-                if (cur.contains("Copy") || cur.contains("Regenerate")) return@withTimeoutOrNull cur
+                if (cur.contains("Copy")) return@withTimeoutOrNull cur
             }
         } ?: appController.read()
     }
