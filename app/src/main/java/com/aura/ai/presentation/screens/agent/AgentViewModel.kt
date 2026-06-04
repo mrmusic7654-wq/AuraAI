@@ -623,7 +623,7 @@ class AgentViewModel @Inject constructor(
     private suspend fun monitorBuild(t: String, o: String, r: String, rid: Long, k: String): String {
         var d = 5000L; var a = 0
         repeat(60) {
-            if (!isActive) return "⏹️ Build monitoring cancelled."
+            if (!kotlinx.coroutines.currentCoroutineContext().isActive) return "⏹️ Build monitoring cancelled."
             delay(d); d = minOf(d * 2, 30000L); a++
             val s = withContext(Dispatchers.IO) { try { val b = client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/actions/runs/$rid").header("Authorization", "Bearer $t").build()).execute().body?.string(); Pair(Regex("\"status\"\\s*:\\s*\"([^\"]+)\"").find(b ?: "")?.groupValues?.get(1), Regex("\"conclusion\"\\s*:\\s*\"([^\"]+)\"").find(b ?: "")?.groupValues?.get(1)) } catch (e: Exception) { null } }
             if (s?.first == "completed") return if (s.second == "success") { val art = getArtifact(t, o, r, rid); "🎉 BUILD SUCCESS!\n📱 $r\n📥 ${art ?: "APK in Actions"}" } else { val logs = fetchLogs(t, o, r, rid); val err = extractErrors(logs); if (a < 3 && fixErrors(k, t, o, r, err, logs)) { val nr = triggerWorkflow(t, o, r); if (nr != null) return monitorBuild(t, o, r, nr, k) }; "❌ Build failed after $a attempts.\n🔗 https://github.com/$o/$r/actions/runs/$rid" }
