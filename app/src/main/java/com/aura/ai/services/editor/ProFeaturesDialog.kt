@@ -1,5 +1,9 @@
 package com.aura.ai.presentation.screens.editor
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -52,7 +56,7 @@ fun ProFeaturesDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 // Feature selector
-                LazyColumnWrapper(height = 120.dp) {
+                Column(modifier = Modifier.height(120.dp).verticalScroll(rememberScrollState())) {
                     features.forEach { (key, label) ->
                         Surface(
                             onClick = { selectedFeature = key },
