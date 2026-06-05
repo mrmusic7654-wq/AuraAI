@@ -23,10 +23,10 @@ class AppController(private val service: AccessibilityService) {
     }
     
     fun openApp(packageName: String) {
-        val pm = service.context.packageManager
+        val pm = service.packageManager  // Fixed: removed .context
         val intent = pm.getLaunchIntentForPackage(packageName)
         intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        service.context.startActivity(intent)
+        service.startActivity(intent)  // Fixed: removed .context
     }
     
     suspend fun execute(app: String, steps: List<AppStep>): String {
@@ -45,7 +45,9 @@ class AppController(private val service: AccessibilityService) {
                     "home" -> service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
                 }
                 delay(s.waitMs)
-            } catch (e: Exception) { return "Step ${i+1} failed" }
+            } catch (e: Exception) {
+                return "Step ${i+1} failed"
+            }
         }
         return r
     }
