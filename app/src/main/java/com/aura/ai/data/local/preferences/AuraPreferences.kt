@@ -235,4 +235,19 @@ class AuraPreferences @Inject constructor(
     fun clearApiKeys() {
         securePrefs.edit().remove("api_key").remove("github_token").remove("telegram_token").apply()
     }
+    fun getApiKeyManager(): com.aura.ai.data.local.ApiKeyManager? {
+    return com.aura.ai.data.local.ApiKeyManager(context)
+}
+
+fun getString(key: String, default: String?): String? {
+    return prefs.getString(key, default)
+}
+
+fun setHfSpaceUrl(url: String) {
+    prefs.edit().putString("hf_space_url", url).apply()
+}
+
+fun getHfSpaceUrl(): String {
+    return prefs.getString("hf_space_url", "https://aura-orchestrator.hf.space") ?: "https://aura-orchestrator.hf.space"
+}
 }
