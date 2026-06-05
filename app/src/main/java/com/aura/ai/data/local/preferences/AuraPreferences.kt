@@ -4,16 +4,19 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class AuraPreferences @Inject constructor(
-    private val context: Context
+    @ApplicationContext private val context: Context
 ) {
+    
     // ═══════════════════════════════════════════
-    // ENCRYPTED STORAGE FOR SENSITIVE KEYS
+    // ENCRYPTED STORAGE FOR SENSITIVE DATA
     // ═══════════════════════════════════════════
+    
     private val masterKey = MasterKey.Builder(context)
         .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
         .build()
@@ -29,79 +32,69 @@ class AuraPreferences @Inject constructor(
     // ═══════════════════════════════════════════
     // REGULAR STORAGE FOR NON-SENSITIVE DATA
     // ═══════════════════════════════════════════
-    private val prefs: SharedPreferences = context.getSharedPreferences("aura_prefs", Context.MODE_PRIVATE)
+    
+    private val prefs: SharedPreferences = context.getSharedPreferences(
+        "aura_prefs",
+        Context.MODE_PRIVATE
+    )
 
     // ═══════════════════════════════════════════
-    // DEFAULT API KEYS (Replace with your actual keys)
+    // DEFAULT API KEYS (Replace with your keys)
     // ═══════════════════════════════════════════
+    
     companion object {
-        const val DEFAULT_GEMINI_API_KEY = "AIzaSyBEbUwT5_LDxENu7FNpD5oSTs3mvwJDDPc"
-        const val DEFAULT_GITHUB_TOKEN = "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"
-        const val DEFAULT_TELEGRAM_TOKEN = "8962193188:AAEmhBBttbsbF9nFSMG5Kv1SqCpHJh8MNaQ"
+        const val DEFAULT_GEMINI_API_KEY = "YOUR_GEMINI_API_KEY"
+        const val DEFAULT_GITHUB_TOKEN = "YOUR_GITHUB_TOKEN"
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 1: GEMINI API KEY
+    // GEMINI API KEY
     // ═══════════════════════════════════════════
+    
     fun getApiKey(): String? {
         val stored = securePrefs.getString("api_key", null)
-        return if (stored.isNullOrBlank()) DEFAULT_GEMINI_API_KEY.takeIf { it != "YOUR_GEMINI_API_KEY_HERE" } else stored
+        return if (stored.isNullOrBlank()) DEFAULT_GEMINI_API_KEY else stored
     }
 
     fun saveApiKey(apiKey: String) {
         securePrefs.edit().putString("api_key", apiKey).apply()
     }
 
-    fun hasApiKey(): Boolean {
-        return getApiKey()?.isNotBlank() == true
-    }
+    fun hasApiKey(): Boolean = getApiKey()?.isNotBlank() == true
 
     // ═══════════════════════════════════════════
-    // SECTION 2: GITHUB TOKEN
+    // GITHUB TOKEN
     // ═══════════════════════════════════════════
+    
     fun getGitHubToken(): String? {
         val stored = securePrefs.getString("github_token", null)
-        return if (stored.isNullOrBlank()) DEFAULT_GITHUB_TOKEN.takeIf { it != "YOUR_GITHUB_TOKEN_HERE" } else stored
+        return if (stored.isNullOrBlank()) DEFAULT_GITHUB_TOKEN else stored
     }
 
     fun saveGitHubToken(token: String) {
         securePrefs.edit().putString("github_token", token).apply()
     }
 
-    fun hasGitHubToken(): Boolean {
-        return getGitHubToken()?.isNotBlank() == true
-    }
+    fun hasGitHubToken(): Boolean = getGitHubToken()?.isNotBlank() == true
 
     // ═══════════════════════════════════════════
-    // SECTION 3: TELEGRAM BOT TOKEN
+    // TELEGRAM BOT TOKEN
     // ═══════════════════════════════════════════
+    
     fun getTelegramToken(): String? {
-        val stored = securePrefs.getString("telegram_token", null)
-        return if (stored.isNullOrBlank()) DEFAULT_TELEGRAM_TOKEN.takeIf { it.isNotBlank() } else stored
+        return securePrefs.getString("telegram_token", null)
     }
 
     fun saveTelegramToken(token: String) {
         securePrefs.edit().putString("telegram_token", token).apply()
     }
 
-    fun hasTelegramToken(): Boolean {
-        return getTelegramToken()?.isNotBlank() == true
-    }
+    fun hasTelegramToken(): Boolean = getTelegramToken()?.isNotBlank() == true
 
     // ═══════════════════════════════════════════
-    // SECTION 4: THEME
+    // MODEL PREFERENCES
     // ═══════════════════════════════════════════
-    fun getThemeMode(): String {
-        return prefs.getString("theme_mode", "Cyberpunk Dark") ?: "Cyberpunk Dark"
-    }
-
-    fun saveThemeMode(mode: String) {
-        prefs.edit().putString("theme_mode", mode).apply()
-    }
-
-    // ═══════════════════════════════════════════
-    // SECTION 5: MODEL PREFERENCES
-    // ═══════════════════════════════════════════
+    
     fun getPreferredModel(): String? {
         return prefs.getString("preferred_model", null)
     }
@@ -111,8 +104,9 @@ class AuraPreferences @Inject constructor(
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 6: SESSION PERSISTENCE
+    // SESSION PERSISTENCE
     // ═══════════════════════════════════════════
+    
     fun getLastSessionId(): String? {
         return prefs.getString("last_session_id", null)
     }
@@ -122,8 +116,9 @@ class AuraPreferences @Inject constructor(
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 7: API USAGE TRACKING
+    // API USAGE TRACKING
     // ═══════════════════════════════════════════
+    
     fun getTotalApiCalls(): Int {
         return prefs.getInt("total_api_calls", 0)
     }
@@ -151,7 +146,10 @@ class AuraPreferences @Inject constructor(
     }
 
     fun resetDailyCountersIfNeeded(): Boolean {
-        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+        val today = java.text.SimpleDateFormat(
+            "yyyy-MM-dd",
+            java.util.Locale.getDefault()
+        ).format(java.util.Date())
         val lastReset = getDailyResetDate()
         if (lastReset != today) {
             setTotalApiCalls(0)
@@ -162,25 +160,22 @@ class AuraPreferences @Inject constructor(
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 8: USER PROFILE
+    // HUGGING FACE SPACE
     // ═══════════════════════════════════════════
-    fun getUserName(): String? {
-        return prefs.getString("user_name", null)
+    
+    fun getHfSpaceUrl(): String {
+        return prefs.getString("hf_space_url", "https://aura-orchestrator.hf.space")
+            ?: "https://aura-orchestrator.hf.space"
     }
 
-    fun saveUserName(name: String) {
-        prefs.edit().putString("user_name", name).apply()
-    }
-
-    fun isFirstRun(): Boolean {
-        val firstRun = prefs.getBoolean("first_run", true)
-        if (firstRun) prefs.edit().putBoolean("first_run", false).apply()
-        return firstRun
+    fun setHfSpaceUrl(url: String) {
+        prefs.edit().putString("hf_space_url", url).apply()
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 9: CODESPACES
+    // CODESPACES
     // ═══════════════════════════════════════════
+    
     fun getActiveCodespaceId(): String? {
         return prefs.getString("active_codespace_id", null)
     }
@@ -194,29 +189,52 @@ class AuraPreferences @Inject constructor(
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 10: GENERIC HELPERS
+    // APP STATE
     // ═══════════════════════════════════════════
-    fun putString(key: String, value: String) {
-        prefs.edit().putString(key, value).apply()
+    
+    fun isFirstLaunch(): Boolean {
+        val firstRun = prefs.getBoolean("first_run", true)
+        if (firstRun) prefs.edit().putBoolean("first_run", false).apply()
+        return firstRun
     }
 
-    fun getString(key: String, default: String?): String? {
-        return prefs.getString(key, default)
+    fun getThemeMode(): String {
+        return prefs.getString("theme_mode", "Dark") ?: "Dark"
+    }
+
+    fun saveThemeMode(mode: String) {
+        prefs.edit().putString("theme_mode", mode).apply()
+    }
+
+    // ═══════════════════════════════════════════
+    // USER PROFILE
+    // ═══════════════════════════════════════════
+    
+    fun getUserName(): String? {
+        return prefs.getString("user_name", null)
+    }
+
+    fun saveUserName(name: String) {
+        prefs.edit().putString("user_name", name).apply()
+    }
+
+    // ═══════════════════════════════════════════
+    // GENERIC HELPERS
+    // ═══════════════════════════════════════════
+    
+    fun putString(key: String, value: String) {
+        prefs.edit().putString(key, value).apply()
     }
 
     fun putInt(key: String, value: Int) {
         prefs.edit().putInt(key, value).apply()
     }
 
-    fun getInt(key: String, default: Int): Int {
-        return prefs.getInt(key, default)
-    }
-
     fun putBoolean(key: String, value: Boolean) {
         prefs.edit().putBoolean(key, value).apply()
     }
 
-    fun getBoolean(key: String, default: Boolean): Boolean {
+    fun getBoolean(key: String, default: Boolean = false): Boolean {
         return prefs.getBoolean(key, default)
     }
 
@@ -225,29 +243,19 @@ class AuraPreferences @Inject constructor(
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 11: DATA MANAGEMENT
+    // DATA MANAGEMENT
     // ═══════════════════════════════════════════
+    
     fun clearAllData() {
         securePrefs.edit().clear().apply()
         prefs.edit().clear().apply()
     }
 
     fun clearApiKeys() {
-        securePrefs.edit().remove("api_key").remove("github_token").remove("telegram_token").apply()
+        securePrefs.edit()
+            .remove("api_key")
+            .remove("github_token")
+            .remove("telegram_token")
+            .apply()
     }
-    fun getApiKeyManager(): com.aura.ai.data.local.ApiKeyManager? {
-    return com.aura.ai.data.local.ApiKeyManager(context)
-}
-
-fun getString(key: String, default: String?): String? {
-    return prefs.getString(key, default)
-}
-
-fun setHfSpaceUrl(url: String) {
-    prefs.edit().putString("hf_space_url", url).apply()
-}
-
-fun getHfSpaceUrl(): String {
-    return prefs.getString("hf_space_url", "https://aura-orchestrator.hf.space") ?: "https://aura-orchestrator.hf.space"
-}
 }
