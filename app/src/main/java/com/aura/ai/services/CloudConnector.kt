@@ -1,7 +1,6 @@
 package com.aura.ai.services
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -20,14 +19,19 @@ class CloudConnector(
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
     
-    private val headers = mapOf(
-        "Authorization" to "Bearer $hfToken",
-        "Content-Type" to "application/json"
+    data class CloudResult(
+        val success: Boolean,
+        val data: String,
+        val code: Int
     )
     
     // ═══════════════════════════════════════════
     // TASK DELEGATION
     // ═══════════════════════════════════════════
+    
+    suspend fun checkHealth(): CloudResult {
+        return callApi("/api/health", emptyMap())
+    }
     
     suspend fun delegateCodeGeneration(appName: String, description: String): CloudResult {
         return callApi("/api/generate", mapOf(
@@ -62,8 +66,16 @@ class CloudConnector(
         ))
     }
     
-    suspend fun checkHealth(): CloudResult {
-        return callApi("/api/health", emptyMap())
+    suspend fun delegateFixErrors(owner: String, repo: String, errors: String): CloudResult {
+        return callApi("/api/fix", mapOf(
+            "owner" to owner,
+            "repo" to repo,
+            "errors" to errors
+        ))
+    }
+    
+    suspend fun getUsage(): CloudResult {
+        return callApi("/api/usage", emptyMap())
     }
     
     // ═══════════════════════════════════════════
@@ -78,7 +90,8 @@ class CloudConnector(
                 
                 val request = Request.Builder()
                     .url("$spaceUrl$endpoint")
-                    .apply { headers.forEach { (key, value) -> addHeader(key, value) } }
+                    .addHeader("Authorization", "Bearer $hfToken")
+                    .addHeader("Content-Type", "application/json")
                     .post(json.toString().toRequestBody("application/json".toMediaType()))
                     .build()
                 
@@ -91,36 +104,62 @@ class CloudConnector(
                     code = response.code
                 )
             } catch (e: Exception) {
-                CloudResult(success = false, data = e.message ?: "Unknown error", code = 0)
+                CloudResult(
+                    success = false,
+                    data = e.message ?: "Unknown error",
+                    code = 0
+                )
             }
         }
     }
     
     // ═══════════════════════════════════════════
-    // QUICK TASKS (Fire and forget)
+    // QUICK TASKS (Fire and forget with callback)
     // ═══════════════════════════════════════════
     
     fun startBuildMonitoring(owner: String, repo: String, onUpdate: (String) -> Unit) {
-        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.IO).launch {
             val result = delegateBuildMonitoring(owner, repo)
-            kotlinx.coroutines.withContext(Dispatchers.Main) {
+            withContext(Dispatchers.Main) {
                 onUpdate(if (result.success) result.data else "Build monitoring failed: ${result.data}")
             }
         }
     }
     
     fun startCodeGeneration(appName: String, description: String, onUpdate: (String) -> Unit) {
-        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.IO).launch {
             val result = delegateCodeGeneration(appName, description)
-            kotlinx.coroutines.withContext(Dispatchers.Main) {
+            withContext(Dispatchers.Main) {
                 onUpdate(if (result.success) result.data else "Generation failed: ${result.data}")
             }
         }
     }
     
-    data class CloudResult(
-        val success: Boolean,
-        val data: String,
-        val code: Int
-    )
-} 
+    fun startScreenshotAnalysis(imageBase64: String, prompt: String, onUpdate: (String) -> Unit) {
+        CoroutineScope(Dispatchers.IO).launch {
+            val result = delegateScreenshotAnalysis(imageBase64, prompt)
+            withContext(Dispatchers.Main) {
+                onUpdate(if (result.success) result.data else "Analysis failed: ${result.data}")
+            }
+        }
+    }
+    
+    fun startContextCompression(conversation: String, onUpdate: (String) -> Unit) {
+        CoroutineScope(Dispatchers.IO).launch {
+            val result = delegateContextCompression(conversation)
+            withContext(Dispatchers.Main) {
+                onUpdate(if (result.success) result.data else "Compression failed: ${result.data}")
+            }
+        }
+    }
+    
+    // ═══════════════════════════════════════════
+    // STATUS
+    // ═══════════════════════════════════════════
+    
+    fun isConfigured(): Boolean {
+        return spaceUrl.isNotBlank() && hfToken.isNotBlank()
+    }
+    
+    fun getSpaceUrl(): String = spaceUrl
+}
