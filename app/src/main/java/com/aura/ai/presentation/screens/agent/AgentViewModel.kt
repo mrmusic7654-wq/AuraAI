@@ -10,17 +10,14 @@ import android.os.Environment
 import android.os.StatFs
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.aura.ai.data.local.database.SessionDatabase
-import com.aura.ai.data.local.database.SessionEntity
-import com.aura.ai.data.local.database.MessageEntity
-import com.aura.ai.data.local.database.ModelUsageEntity
+import com.aura.ai.agentic.core.*
+import com.aura.ai.agentic.execution.*
+import com.aura.ai.agentic.memory.*
+import com.aura.ai.agentic.planning.*
+import com.aura.ai.data.local.ApiKeyManager
+import com.aura.ai.data.local.database.*
 import com.aura.ai.data.local.preferences.AuraPreferences
-import com.aura.ai.services.AuraAccessibilityService
-import com.aura.ai.services.AuraForegroundService
-import com.aura.ai.services.AppController
-import com.aura.ai.services.BuildTemplates
-import com.aura.ai.services.CodespacesManager
-import com.aura.ai.services.ZipProcessor
+import com.aura.ai.services.*
 import com.google.ai.client.generativeai.Chat
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
@@ -42,9 +39,9 @@ import java.util.*
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
-// ═══════════════════════════════════════════════════════════════════
-// SECTION 1: PUBLIC DATA CLASSES
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
+// DATA CLASSES
+// ═══════════════════════════════════════════
 
 data class ChatMessage(val text: String, val isUser: Boolean, val isStreaming: Boolean = false)
 
@@ -69,48 +66,34 @@ data class AgentUiState(
     val messages: List<ChatMessage> = listOf(ChatMessage("AURA AI - NEURAL CORE ACTIVE", false)),
     val input: String = "", val loading: Boolean = false, val isExecuting: Boolean = false,
     val currentTask: String = "", val executionMode: ExecutionMode = ExecutionMode.IDLE,
-    val activeModel: String = "gemini-3.5-flash", val showDrawer: Boolean = false,
+    val activeModel: String = "gemini-2.5-flash", val showDrawer: Boolean = false,
     val showModelDashboard: Boolean = false, val manualModelSelected: Boolean = false,
     val currentSessionId: String? = null, val buildLoop: BuildLoopState? = null,
     val isGeneratingApp: Boolean = false, val generationProgress: String = "",
     val codespaceMode: Boolean = false, val activeCodespaceId: String? = null,
-    val codespaceStatus: String = "", val pendingBatchFiles: Map<String, String> = emptyMap(),
-    val isOnline: Boolean = true, val totalApiCalls: Int = 0,
     val attachedFileUri: android.net.Uri? = null, val attachedFileName: String = "",
-    val isAutonomousMode: Boolean = false
+    val isOnline: Boolean = true, val totalApiCalls: Int = 0,
+    val isAutonomousMode: Boolean = false, val isAgenticMode: Boolean = false
 )
 
 enum class ExecutionMode {
     IDLE, CHATTING, GENERATING_APP, PHONE_CONTROL, GITHUB_OPERATION,
     FILE_OPERATION, REPO_ANALYSIS, FEATURE_TRANSFER, CODESPACE_GENERATION,
     BATCH_FILE_PUSH, IMAGE_ANALYSIS, FILE_UPLOAD, STREAMING_CHAT,
-    APP_CONTROL, ZIP_PROCESSING, CONTEXT_COMPRESSION, AUTONOMOUS
+    APP_CONTROL, ZIP_PROCESSING, CONTEXT_COMPRESSION, AUTONOMOUS,
+    CLOUD_EXECUTION, AGENTIC
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// SECTION 2: INTERNAL DATA CLASSES
-// ═══════════════════════════════════════════════════════════════════
-
-private data class AppArchitecture(
-    val files: List<String>, val techStack: String,
-    val dependencies: List<String>, val structure: String
-)
-
+private data class AppArchitecture(val files: List<String>, val techStack: String, val dependencies: List<String>, val structure: String)
 private data class FixPlan(val summary: String, val fileFixes: List<Pair<String, String>>)
-private data class RepoInfo(val description: String, val stars: Int, val forks: Int, val language: String)
-private data class RepoAnalysis(val architecture: String, val keyFeatures: List<String>, val fileStructure: Map<String, String>, val dependencies: List<String>, val coreLogic: Map<String, String>)
-private data class FeatureTransferRequest(val sourceOwner: String, val sourceRepo: String, val targetFeatures: List<String>, val additionalContext: String)
-private data class QueuedCommand(val id: String, val command: String, val timestamp: Long)
-
 private sealed class WorkflowResult {
     data object Success : WorkflowResult()
     data class Failure(val error: String, val logs: String) : WorkflowResult()
-    data object Timeout : WorkflowResult()
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// SECTION 3: VIEWMODEL CLASS
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
+// VIEWMODEL
+// ═══════════════════════════════════════════
 
 @HiltViewModel
 class AgentViewModel @Inject constructor(
@@ -118,29 +101,21 @@ class AgentViewModel @Inject constructor(
 ) : ViewModel() {
 
     // ═══════════════════════════════════════════
-    // SECTION 3.1: STATE MANAGEMENT
+    // STATE MANAGEMENT
     // ═══════════════════════════════════════════
 
     private val _state = MutableStateFlow(AgentUiState())
     val state: StateFlow<AgentUiState> = _state.asStateFlow()
     private var taskJob: Job? = null
-    private var isPaused = false
     private var activeRepo = ""
     private var activeOwner = ""
     private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
+        .connectTimeout(30, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS).build()
     private var pendingGenerationFiles: Map<String, String> = emptyMap()
-    private val commandQueue = mutableListOf<QueuedCommand>()
-    private var contextCompressionPending = false
-    private var heartbeatJob: Job? = null
-    private var lastHeartbeat = System.currentTimeMillis()
-    private var screenshotInterval = 30_000L
 
     // ═══════════════════════════════════════════
-    // SECTION 3.2: SESSION MANAGEMENT
+    // SESSION MANAGEMENT
     // ═══════════════════════════════════════════
 
     private val sessionDb by lazy { SessionDatabase.getInstance(com.aura.ai.AuraApplication.instance) }
@@ -149,25 +124,11 @@ class AgentViewModel @Inject constructor(
     private val _currentSessionId = MutableStateFlow<String?>(null)
     val currentSessionId: StateFlow<String?> = _currentSessionId.asStateFlow()
     private val _modelUsage = MutableStateFlow<List<ModelUsageEntity>>(emptyList())
-    private var sessionLoadingJob: Job? = null
     private val chatSessions = mutableMapOf<String, Chat>()
-
-    init {
-        loadSessions()
-        loadModelUsage()
-        loadPreferredModel()
-        viewModelScope.launch {
-            resetDailyCountersIfNeeded()
-            val lastId = preferences.getLastSessionId()
-            if (lastId != null) switchSession(lastId)
-            else if (_sessions.value.isEmpty()) createNewSession()
-        }
-        _state.value = _state.value.copy(isOnline = isNetworkAvailable())
-        _state.value = _state.value.copy(totalApiCalls = preferences.getTotalApiCalls())
-    }
+    private var contextCompressionPending = false
 
     // ═══════════════════════════════════════════
-    // SECTION 3.3: MODEL REGISTRY (Updated June 2025)
+    // MODEL REGISTRY
     // ═══════════════════════════════════════════
 
     private data class ModelSpec(val rpd: Int, val rpm: Int, val tpm: Int, val description: String)
@@ -187,13 +148,116 @@ class AgentViewModel @Inject constructor(
         "debug" to listOf("gemini-2.5-flash", "gemini-3.5-flash", "gemini-2.5-flash-lite"),
         "complex" to listOf("gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.0-flash"),
         "high_volume" to listOf("gemini-2.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.0-flash"),
-        "general" to listOf("gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash"),
-        "embedding" to listOf("gemini-embedding-2")
+        "general" to listOf("gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash")
     )
 
     private val modelCooldowns = mutableMapOf<String, Long>()
     private val modelDailyUsage = mutableMapOf<String, Int>()
     private var consecutiveFailures = 0
+
+    // ═══════════════════════════════════════════
+    // AGENTIC COMPONENTS
+    // ═══════════════════════════════════════════
+
+    private val consciousness = Consciousness()
+    private val patternRecognizer = PatternRecognizer()
+    private val experienceBuffer = ExperienceBuffer()
+    private val knowledgeGraph = KnowledgeGraph()
+    private val longTermMemory = LongTermMemory(com.aura.ai.AuraApplication.instance)
+    private val trustManager = TrustManager(com.aura.ai.AuraApplication.instance)
+    private val goalEngine = GoalEngine()
+    private val taskDecomposer = TaskDecomposer()
+    private val priorityEngine = PriorityEngine()
+    private val resourcePlanner = ResourcePlanner()
+    private val dependencyResolver = DependencyResolver()
+
+    private var taskPlanner: TaskPlanner? = null
+    private var continuousAgent: ContinuousAgent? = null
+    private var intelligentController: IntelligentController? = null
+    private var cloudConnector: CloudConnector? = null
+    private var apiKeyManager: ApiKeyManager? = null
+    private var auraBrain: AuraBrain? = null
+    private var selfPromptLoop: SelfPromptLoop? = null
+    private var autonomousExecutor: AutonomousExecutor? = null
+    private var fileHandler: FileAttachmentHandler? = null
+    private var heartbeatJob: Job? = null
+    private var lastHeartbeat = System.currentTimeMillis()
+    private var screenshotInterval = 30_000L
+    private val commandQueue = mutableListOf<QueuedCommand>()
+
+    private data class QueuedCommand(val id: String, val command: String, val timestamp: Long)
+
+    // ═══════════════════════════════════════════
+    // INITIALIZATION
+    // ═══════════════════════════════════════════
+
+    init {
+        loadSessions()
+        loadModelUsage()
+        loadPreferredModel()
+        initializeAgenticComponents()
+        viewModelScope.launch {
+            resetDailyCountersIfNeeded()
+            val lastId = preferences.getLastSessionId()
+            if (lastId != null) switchSession(lastId)
+            else if (_sessions.value.isEmpty()) createNewSession()
+        }
+        _state.value = _state.value.copy(isOnline = isNetworkAvailable())
+        _state.value = _state.value.copy(totalApiCalls = preferences.getTotalApiCalls())
+    }
+
+    private fun initializeAgenticComponents() {
+        apiKeyManager = ApiKeyManager(com.aura.ai.AuraApplication.instance)
+        fileHandler = FileAttachmentHandler(com.aura.ai.AuraApplication.instance)
+        
+        val hfToken = apiKeyManager?.get(ApiKeyManager.ApiType.HUGGINGFACE)
+        val spaceUrl = preferences.getHfSpaceUrl()
+        if (!hfToken.isNullOrBlank()) {
+            cloudConnector = CloudConnector(spaceUrl, hfToken)
+        }
+        
+        val service = AuraAccessibilityService.instance
+        if (service != null) {
+            val ac = AppController(service)
+            taskPlanner = TaskPlanner(ac, preferences.getApiKey() ?: "")
+            intelligentController = IntelligentController(ac, preferences.getApiKey() ?: "")
+        }
+        
+        autonomousExecutor = AutonomousExecutor(consciousness, experienceBuffer)
+        
+        auraBrain = AuraBrain(
+            consciousness, patternRecognizer, priorityEngine,
+            resourcePlanner, trustManager, experienceBuffer
+        )
+        
+        selfPromptLoop = SelfPromptLoop(
+            auraBrain!!, consciousness,
+            onDecisionReady = { decision ->
+                viewModelScope.launch {
+                    autonomousExecutor?.execute(decision.suggestedAction)
+                    addMsg("🤖 Auto: ${decision.suggestedAction}")
+                }
+            },
+            onApprovalNeeded = { action ->
+                viewModelScope.launch {
+                    addMsg("🔔 Approval needed: $action — type 'approve' or 'reject'")
+                }
+            }
+        )
+        
+        if (taskPlanner != null) {
+            continuousAgent = ContinuousAgent(
+                taskPlanner!!, consciousness,
+                onProgress = { viewModelScope.launch { addMsg(it) } },
+                onComplete = { viewModelScope.launch { addMsg(it) } },
+                onError = { viewModelScope.launch { addMsg(it) } }
+            )
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    // MODEL SELECTION
+    // ═══════════════════════════════════════════
 
     private fun selectOptimalModel(taskType: String): String {
         if (_state.value.manualModelSelected) return _state.value.activeModel
@@ -227,27 +291,15 @@ class AgentViewModel @Inject constructor(
     private fun applyModelCooldown(model: String) { consecutiveFailures++; modelCooldowns[model] = System.currentTimeMillis() + 60000 }
     private fun resetFailureState() { consecutiveFailures = 0 }
 
-    // ═══════════════════════════════════════════
-    // SECTION 3.4: NETWORK & QUEUE
-    // ═══════════════════════════════════════════
-
-    private fun isNetworkAvailable(): Boolean {
-        return try {
-            val cm = com.aura.ai.AuraApplication.instance.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            cm.activeNetworkInfo?.isConnected == true
-        } catch (e: Exception) { true }
-    }
-
-    private fun processQueue() {
-        if (commandQueue.isNotEmpty() && isNetworkAvailable()) {
-            val next = commandQueue.removeAt(0)
-            _state.value = _state.value.copy(input = next.command)
-            send()
-        }
+    private fun formatModelName(name: String): String = when (name) {
+        "gemini-3.5-flash" -> "3.5 Flash ⚡"; "gemini-3.1-flash-lite" -> "3.1 Flash-Lite 🚀"
+        "gemini-2.5-flash" -> "2.5 Flash 💎"; "gemini-2.5-flash-lite" -> "2.5 Flash-Lite ⚡"
+        "gemini-2.0-flash" -> "2.0 Flash 📦"; "gemini-embedding-2" -> "Embedding 2 🔍"
+        else -> name.replace("gemini-", "").replace("-", " ").uppercase()
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 3.5: PUBLIC INTERFACE
+    // PUBLIC INTERFACE
     // ═══════════════════════════════════════════
 
     fun updateInput(text: String) { _state.value = _state.value.copy(input = text) }
@@ -271,15 +323,10 @@ class AgentViewModel @Inject constructor(
     fun getModelInfoList(): List<ModelInfo> {
         return modelRegistry.map { (name, spec) ->
             val usage = _modelUsage.value.find { it.modelName == name }
-            ModelInfo(name = name, displayName = formatModelName(name), strength = spec.description, dailyRequests = usage?.dailyRequests ?: 0, dailyLimit = spec.rpd, isInCooldown = isModelInCooldown(name), isSelected = name == _state.value.activeModel)
+            ModelInfo(name = name, displayName = formatModelName(name), strength = spec.description,
+                dailyRequests = usage?.dailyRequests ?: 0, dailyLimit = spec.rpd,
+                isInCooldown = isModelInCooldown(name), isSelected = name == _state.value.activeModel)
         }
-    }
-
-    private fun formatModelName(name: String): String = when (name) {
-        "gemini-3.5-flash" -> "3.5 Flash ⚡"; "gemini-3.1-flash-lite" -> "3.1 Flash-Lite 🚀"
-        "gemini-2.5-flash" -> "2.5 Flash 💎"; "gemini-2.5-flash-lite" -> "2.5 Flash-Lite ⚡"
-        "gemini-2.0-flash" -> "2.0 Flash 📦"; "gemini-embedding-2" -> "Embedding 2 🔍"
-        else -> name.replace("gemini-", "").replace("-", " ").uppercase()
     }
 
     fun createNewSession() {
@@ -292,14 +339,15 @@ class AgentViewModel @Inject constructor(
 
     fun switchSession(sessionId: String) {
         viewModelScope.launch {
-            sessionLoadingJob?.cancel()
-            sessionLoadingJob = viewModelScope.launch {
-                val s = sessionDb.sessionDao().getSession(sessionId) ?: return@launch
-                _currentSessionId.value = sessionId; preferences.setLastSessionId(sessionId)
-                val msgs = sessionDb.messageDao().getMessagesForSessionOnce(sessionId)
-                _state.value = _state.value.copy(messages = if (msgs.isEmpty()) _state.value.messages else msgs.map { ChatMessage(it.text, it.isUser) }, currentSessionId = sessionId, manualModelSelected = true, activeModel = s.selectedModel, buildLoop = null, isGeneratingApp = false)
-                sessionDb.sessionDao().updateSession(sessionId, System.currentTimeMillis(), s.title)
-            }
+            val s = sessionDb.sessionDao().getSession(sessionId) ?: return@launch
+            _currentSessionId.value = sessionId; preferences.setLastSessionId(sessionId)
+            val msgs = sessionDb.messageDao().getMessagesForSessionOnce(sessionId)
+            _state.value = _state.value.copy(
+                messages = if (msgs.isEmpty()) _state.value.messages else msgs.map { ChatMessage(it.text, it.isUser) },
+                currentSessionId = sessionId, manualModelSelected = true,
+                activeModel = s.selectedModel, buildLoop = null, isGeneratingApp = false
+            )
+            sessionDb.sessionDao().updateSession(sessionId, System.currentTimeMillis(), s.title)
         }
     }
 
@@ -325,27 +373,35 @@ class AgentViewModel @Inject constructor(
             _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("📶 Offline - Queued.", false), loading = false)
             return
         }
+        patternRecognizer.observeAction(msg)
         taskJob = viewModelScope.launch {
             _state.value = _state.value.copy(isExecuting = true, currentTask = msg)
             saveMsg(msg, true)
             val result = execute(msg)
-            _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage(result, false), loading = false, isExecuting = false, currentTask = "", executionMode = ExecutionMode.IDLE)
+            _state.value = _state.value.copy(
+                messages = _state.value.messages + ChatMessage(result, false),
+                loading = false, isExecuting = false, currentTask = "", executionMode = ExecutionMode.IDLE
+            )
             saveMsg(result, false, modelUsed = _state.value.activeModel)
         }
     }
 
     private fun handleControl(input: String): Boolean = when (input.lowercase().trim()) {
         "stop", "cancel" -> { taskJob?.cancel(); _state.value = _state.value.copy(loading = false, isExecuting = false, isGeneratingApp = false, buildLoop = null); true }
+        "approve" -> { addMsg("✅ Approved"); true }
+        "reject" -> { addMsg("❌ Rejected"); true }
         "queue" -> { processQueue(); true }
         else -> false
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 3.6: COMMAND ROUTER
+    // COMMAND ROUTER
     // ═══════════════════════════════════════════
 
     private suspend fun execute(input: String): String {
         val lower = input.lowercase().trim()
+        
+        // System commands
         if (lower == "device info") return "📱 ${Build.MODEL}\n🤖 ${Build.VERSION.RELEASE}\n💾 ${getRamUsage()}\n🔋 ${getBatteryLevel()}"
         if (lower == "time") return "🕐 ${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())}"
         if (lower == "models" || lower == "model limits") return getModelLimits()
@@ -354,26 +410,144 @@ class AgentViewModel @Inject constructor(
         if (lower == "compress no") { contextCompressionPending = false; return "✅ Continuing without compression." }
         if (lower == "heartbeat" || lower == "status") return checkHeartbeat()
         if (lower == "progress" || lower == "what are you doing") return getProgress()
-        if (lower == "start autonomous" || lower == "auto mode on") { startAutonomousMode(); return "🤖 Autonomous mode activated." }
-        if (lower == "stop autonomous" || lower == "auto mode off") { stopAutonomousMode(); return "🔴 Autonomous mode stopped." }
-        if (lower.startsWith("open ")) { val app = lower.removePrefix("open ").trim(); val pkg = resolveApp(app) ?: return "❌ Unknown app"; return try { val i = com.aura.ai.AuraApplication.instance.packageManager.getLaunchIntentForPackage(pkg); i?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); com.aura.ai.AuraApplication.instance.startActivity(i); "✅ Opened $app" } catch (e: Exception) { "❌ ${e.message}" } }
+        if (lower == "keys" || lower == "api keys") return apiKeyManager?.report() ?: "N/A"
+        if (lower == "patterns") return patternRecognizer.report()
+        if (lower == "trust report") return trustManager.report()
+        if (lower == "memory") return longTermMemory.count().toString() + " memories stored"
+        if (lower == "usage") return "📡 API: ${_state.value.totalApiCalls} calls today"
+        
+        // Agentic commands
+        if (lower == "start agentic" || lower == "jarvis mode") { startAgenticMode(); return "🧠 Agentic mode activated." }
+        if (lower == "stop agentic") { stopAgenticMode(); return "🔴 Agentic mode deactivated." }
+        if (lower == "start agent") { continuousAgent?.start(); return "🤖 Agent started" }
+        if (lower == "stop agent") { continuousAgent?.stop(); return "🔴 Agent stopped" }
+        if (lower == "queue") return continuousAgent?.status() ?: "No agent"
+        
+        // Cloud commands
+        if (lower == "cloud status") { val r = cloudConnector?.checkHealth(); return if (r?.success == true) "☁️ Connected" else "☁️ Offline" }
+        if (lower.startsWith("cloud generate ")) { return handleCloudGenerate(input) }
+        if (lower.startsWith("cloud monitor ")) { return handleCloudMonitor(lower) }
+        
+        // AI-planned phone tasks
+        if (lower.startsWith("do ")) { return handleDoTask(input) }
+        
+        // Phone control
+        if (lower.startsWith("open ")) { return handleOpenApp(lower) }
         if (lower == "home") { AuraAccessibilityService.instance?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME); return "🏠 Home" }
         if (lower == "back") { AuraAccessibilityService.instance?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK); return "⬅️ Back" }
-        if (lower == "screenshot") { AuraAccessibilityService.instance?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT); return "📸 Screenshot taken" }
-        if (lower.startsWith("create app") || lower.startsWith("build app") || lower.startsWith("make app")) { if (lower.contains("repo")) return githubCommand(input) ?: "❌ No GitHub token."; _state.value = _state.value.copy(executionMode = ExecutionMode.GENERATING_APP); return createApp(input) }
+        if (lower == "screenshot") { AuraAccessibilityService.instance?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT); return "📸 Screenshot" }
+        if (lower.startsWith("control ")) { return handleControlApp(input) }
+        if (lower.startsWith("send to ")) { return handleSendToApp(input) }
+        if (lower.startsWith("debug with ") || lower.startsWith("ask ")) { return handleDebugWithApp(lower) }
+        if (lower.startsWith("analyze screen")) { return handleAnalyzeScreen(lower) }
+        
+        // App generation
+        if (lower.startsWith("create app") || lower.startsWith("build app") || lower.startsWith("make app")) {
+            if (lower.contains("repo")) return handleGitHub(input) ?: "❌"
+            _state.value = _state.value.copy(executionMode = ExecutionMode.GENERATING_APP)
+            return createApp(input)
+        }
         if (lower.startsWith("continue ")) { _state.value = _state.value.copy(executionMode = ExecutionMode.GENERATING_APP); return continueApp(input) }
-        if (lower.startsWith("codespace ")) { return codespaceCommand(lower) }
+        
+        // ZIP processing
         if (lower.startsWith("process zip") || lower.startsWith("deploy zip")) { return processZip() }
-        if (lower.startsWith("debug with ") || lower.startsWith("ask ")) { return debugWithApp(lower) }
-        if (lower.startsWith("control ")) { return controlApp(input) }
-        if (lower.startsWith("send to ")) { return sendToApp(input) }
-        if (lower.startsWith("analyze screen") || lower.startsWith("what's on screen")) { return analyzeScreenCmd(lower) }
-        if (lower.startsWith("ask gemini app") || lower.startsWith("gemini native")) { return askGeminiApp(input) }
-        return githubCommand(input) ?: chatWithGemini(input)
+        
+        // Codespaces
+        if (lower.startsWith("codespace ")) { return handleCodespace(lower) }
+        
+        // GitHub
+        return handleGitHub(input) ?: chatWithGemini(input)
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 3.7: MODEL LIMITS DISPLAY
+    // COMMAND HANDLERS
+    // ═══════════════════════════════════════════
+
+    private fun handleOpenApp(lower: String): String {
+        val app = lower.removePrefix("open ").trim()
+        val pkg = resolveApp(app) ?: return "❌ Unknown app: $app"
+        return try {
+            val i = com.aura.ai.AuraApplication.instance.packageManager.getLaunchIntentForPackage(pkg)
+            i?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            com.aura.ai.AuraApplication.instance.startActivity(i)
+            "✅ Opened $app"
+        } catch (e: Exception) { "❌ ${e.message}" }
+    }
+
+    private fun handleControlApp(input: String): String {
+        val s = AuraAccessibilityService.instance ?: return "❌ Accessibility not enabled."
+        val parts = input.removePrefix("control ").split(" and ")
+        val pkg = AppController.resolve(parts.firstOrNull()?.trim() ?: return "❌") ?: return "❌"
+        val c = AppController(s)
+        val steps = parts.drop(1).map {
+            when {
+                it.contains("tap") -> AppController.AppStep("tap", it.removePrefix("tap ").trim())
+                it.contains("type") -> AppController.AppStep("type", it.removePrefix("type ").trim())
+                it.contains("swipe") -> AppController.AppStep("swipe", if (it.contains("up")) "up" else "down")
+                it.contains("read") -> AppController.AppStep("read")
+                else -> AppController.AppStep("wait", "", 3000)
+            }
+        }
+        return runBlocking { c.execute(pkg, steps) }
+    }
+
+    private fun handleSendToApp(input: String): String {
+        val s = AuraAccessibilityService.instance ?: return "❌"
+        val parts = input.removePrefix("send to ").split(":", limit = 2)
+        if (parts.size < 2) return "❌ Format: send to [app]: [message]"
+        val c = AppController(s)
+        return runBlocking { c.sendMessage(AppController.resolve(parts[0].trim()) ?: return "❌", parts[1].trim()) }
+    }
+
+    private suspend fun handleDebugWithApp(lower: String): String {
+        val s = AuraAccessibilityService.instance ?: return "❌"
+        val app = lower.removePrefix("debug with ").removePrefix("ask ").split(" ").firstOrNull() ?: return "❌"
+        val pkg = AppController.resolve(app) ?: return "❌"
+        _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("🔄 Opening $app...", false))
+        viewModelScope.launch(Dispatchers.IO) {
+            val c = AppController(s)
+            val err = _state.value.buildLoop?.errorSummary ?: "No errors"
+            val result = c.debug(pkg, err)
+            withContext(Dispatchers.Main) { addMsg("📱 $app: ${result.take(2000)}") }
+        }
+        return "🔄 Working with $app..."
+    }
+
+    private suspend fun handleAnalyzeScreen(lower: String): String {
+        val s = AuraAccessibilityService.instance ?: return "❌"
+        val k = preferences.getApiKey() ?: return "❌"
+        val prompt = when { lower.contains("read") -> "Read all visible text"; lower.contains("describe") -> "Describe this screen"; else -> "What's on this screen?" }
+        return "📸 ${AppController(s).analyzeScreen(k, prompt)}"
+    }
+
+    private suspend fun handleDoTask(input: String): String {
+        val task = input.removePrefix("do ")
+        addMsg("🧠 Planning: $task")
+        viewModelScope.launch {
+            val result = intelligentController?.executeTask(task)
+            withContext(Dispatchers.Main) { addMsg(result?.summary ?: "No result") }
+        }
+        return "🔄 Executing intelligent task..."
+    }
+
+    private fun handleCloudGenerate(input: String): String {
+        val parts = input.removePrefix("cloud generate ").split(" - ", limit = 2)
+        if (parts.size < 2) return "❌ Usage: cloud generate AppName - description"
+        addMsg("☁️ Generating ${parts[0]}...")
+        cloudConnector?.startCodeGeneration(parts[0], parts[1]) { result -> addMsg(result) }
+        return "☁️ Task sent to cloud"
+    }
+
+    private suspend fun handleCloudMonitor(lower: String): String {
+        val parts = lower.removePrefix("cloud monitor ").trim().split("/")
+        if (parts.size < 2) return "❌ Usage: cloud monitor owner/repo"
+        addMsg("☁️ Monitoring ${parts[0]}/${parts[1]}...")
+        cloudConnector?.startBuildMonitoring(parts[0], parts[1]) { result -> addMsg(result) }
+        return "☁️ Monitoring delegated to cloud"
+    }
+
+    // ═══════════════════════════════════════════
+    // MODEL LIMITS DISPLAY
     // ═══════════════════════════════════════════
 
     private fun getModelLimits(): String {
@@ -394,7 +568,7 @@ class AgentViewModel @Inject constructor(
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 3.8: CONTEXT WINDOW COMPRESSION
+    // CONTEXT WINDOW COMPRESSION
     // ═══════════════════════════════════════════
 
     private fun getContextStatus(): String {
@@ -407,7 +581,7 @@ class AgentViewModel @Inject constructor(
         if (estimatedTokens > 850_000 && !contextCompressionPending) {
             contextCompressionPending = true
             withContext(Dispatchers.Main) {
-                _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("⚠️ Context window at ~${estimatedTokens / 10000}%.\nCompress to free space? Type 'compress yes' or 'compress no'", false))
+                _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("⚠️ Context at ~${estimatedTokens / 10000}%. Compress? Type 'compress yes' or 'compress no'", false))
             }
         }
     }
@@ -421,38 +595,44 @@ class AgentViewModel @Inject constructor(
     private suspend fun compressContextWindow(): String {
         val key = preferences.getApiKey() ?: return "❌ No API key."
         val sid = _currentSessionId.value ?: return "❌ No session."
-        addMsg("🗜️ Compressing context window..."); contextCompressionPending = false
+        addMsg("🗜️ Compressing..."); contextCompressionPending = false
+        
         val history = _state.value.messages.joinToString("\n") { "${if (it.isUser) "User" else "Aura"}: ${it.text.take(500)}" }
-        val model = GenerativeModel(selectOptimalModel("complex"), key, generationConfig { temperature = 0.1f; maxOutputTokens = 10000 })
-        val prompt = "Compress this entire conversation into a dense technical summary. Keep ONLY: 1. Current project 2. Architecture decisions 3. Files created 4. Errors and fixes 5. User preferences 6. Pending tasks 7. Critical code.\nREMOVE: greetings, repeated info, failed attempts.\n\nCONVERSATION: $history\n\nCOMPRESSED SUMMARY:"
+        
         return try {
-            val summary = model.generateContent(content { text(prompt) }).text ?: return "❌ Compression failed."
+            val model = GenerativeModel(selectOptimalModel("complex"), key, generationConfig { temperature = 0.1f; maxOutputTokens = 10000 })
+            val summary = model.generateContent(content { text("Compress:\n$history\n\nSUMMARY:") }).text ?: return "❌ Failed"
             recordModelUsage(selectOptimalModel("complex"))
-            saveMsg("[COMPRESSED CONTEXT: $summary]", false)
-            val newChat = GenerativeModel(selectOptimalModel("general"), key, generationConfig { temperature = 0.7f; maxOutputTokens = 60000 }, systemInstruction = content { text("You are Aura AI. Previous session summary:\n$summary\n\nContinue from here. Remember all information above.") }).startChat()
-            newChat.sendMessage(content { text("Restored from compressed context:\n$summary\n\nReady to continue.") })
+            saveMsg("[COMPRESSED: $summary]", false)
+            
+            val newChat = GenerativeModel(selectOptimalModel("general"), key, generationConfig { temperature = 0.7f; maxOutputTokens = 60000 }, systemInstruction = content { text("Previous: $summary\nContinue.") }).startChat()
+            newChat.sendMessage(content { text("Restored. Ready.") })
             chatSessions[sid] = newChat
-            addMsg("✅ Context compressed! Freed ~${estimateContextTokens() / 1000}K tokens.")
-            "✅ Compression successful. Continuing with fresh context."
-        } catch (e: Exception) { "❌ Compression failed: ${e.message}" }
+            
+            addMsg("✅ Compressed! Freed ~${estimateContextTokens() / 1000}K tokens.")
+            "✅ Compression successful."
+        } catch (e: Exception) { "❌ ${e.message}" }
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 3.9: AUTONOMOUS MODE
+    // AGENTIC MODE
     // ═══════════════════════════════════════════
 
-    fun startAutonomousMode() {
+    private fun startAgenticMode() {
         AuraForegroundService.start(com.aura.ai.AuraApplication.instance)
         startHeartbeat()
-        _state.value = _state.value.copy(isAutonomousMode = true)
-        addMsg("🤖 Autonomous mode activated. I'll work until done.")
+        selfPromptLoop?.start()
+        _state.value = _state.value.copy(isAgenticMode = true, isAutonomousMode = true)
+        addMsg("🧠 Agentic mode activated. I'll work autonomously.")
     }
 
-    fun stopAutonomousMode() {
+    private fun stopAgenticMode() {
         AuraForegroundService.stop(com.aura.ai.AuraApplication.instance)
         heartbeatJob?.cancel()
-        _state.value = _state.value.copy(isAutonomousMode = false)
-        addMsg("🔴 Autonomous mode deactivated.")
+        selfPromptLoop?.stop()
+        continuousAgent?.stop()
+        _state.value = _state.value.copy(isAgenticMode = false, isAutonomousMode = false)
+        addMsg("🔴 Agentic mode deactivated.")
     }
 
     private fun startHeartbeat() {
@@ -464,7 +644,7 @@ class AgentViewModel @Inject constructor(
 
     fun checkHeartbeat(): String {
         val elapsed = (System.currentTimeMillis() - lastHeartbeat) / 1000
-        return if (elapsed < 120) "✅ Aura is alive (${elapsed}s ago)" else "⚠️ Last heartbeat ${elapsed}s ago. Aura may be unresponsive."
+        return if (elapsed < 120) "✅ Aura alive (${elapsed}s ago)" else "⚠️ Last heartbeat ${elapsed}s ago"
     }
 
     fun updateProgress(step: Int, total: Int, message: String) {
@@ -472,85 +652,32 @@ class AgentViewModel @Inject constructor(
     }
 
     fun getProgress(): String {
-        return if (_state.value.isGeneratingApp) "📊 Progress: ${_state.value.generationProgress}" else "📊 No active task."
-    }
-
-    fun setScreenshotInterval(seconds: Int) { screenshotInterval = seconds * 1000L }
-
-    // ═══════════════════════════════════════════
-    // SECTION 3.10: SCREENSHOT BLACKLIST
-    // ═══════════════════════════════════════════
-
-    private val screenshotBlacklist = setOf("com.android.settings", "com.google.android.gm", "com.android.email", "com.android.vending")
-
-    private fun canScreenshot(packageName: String): Boolean = packageName !in screenshotBlacklist
-
-    // ═══════════════════════════════════════════
-    // SECTION 3.11: RETRY WITH BACKOFF
-    // ═══════════════════════════════════════════
-
-    private suspend fun <T> retryWithBackoff(maxRetries: Int = 3, initialDelay: Long = 1000, maxDelay: Long = 15000, block: suspend () -> T): T {
-        var delay = initialDelay; var lastException: Exception? = null
-        for (attempt in 1..maxRetries) {
-            try { return block() } catch (e: Exception) { lastException = e; if (attempt < maxRetries) { kotlinx.coroutines.delay(delay); delay = (delay * 2).coerceAtMost(maxDelay) } }
-        }
-        throw lastException ?: Exception("Retry failed after $maxRetries attempts")
+        return if (_state.value.isGeneratingApp) "📊 ${_state.value.generationProgress}" else "📊 No active task."
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 3.12: CODESPACES COMMANDS
-    // ═══════════════════════════════════════════
-
-    private suspend fun codespaceCommand(lower: String): String {
-        val token = preferences.getGitHubToken() ?: return "❌ No GitHub token."
-        val m = CodespacesManager(token)
-        if (lower.startsWith("codespace create")) { val p = lower.removePrefix("codespace create").trim().split("/"); val o = if (p.size == 2) p[0] else activeOwner; val r = if (p.size == 2) p[1] else activeRepo; if (o.isBlank() || r.isBlank()) return "❌ Specify owner/repo."; val cs = m.createCodespace(o, r) ?: return "❌ Failed."; _state.value = _state.value.copy(activeCodespaceId = cs.id, codespaceMode = true); return "🖥️ ${cs.name}\n🔗 ${cs.webUrl}" }
-        if (lower == "codespace list") { val l = m.listCodespaces(); return if (l.isEmpty()) "📁 None." else l.joinToString("\n") { "• ${it.name} (${it.state})" } }
-        return "❌ Unknown codespace command."
-    }
-
-    // ═══════════════════════════════════════════
-    // SECTION 3.13: GITHUB COMMANDS
-    // ═══════════════════════════════════════════
-
-    private suspend fun githubCommand(input: String): String? {
-        val t = preferences.getGitHubToken() ?: return null; val l = input.lowercase().trim()
-        if (l.contains("create") && l.contains("repo")) { val n = input.replace(Regex("(?i)(create|a|repo|repository|github)"), "").trim().sanitize().take(50); return apiCall("POST", "https://api.github.com/user/repos", t, """{"name":"$n","private":false,"auto_init":true}""") }
-        if (l.contains("list") && l.contains("repo")) return apiCall("GET", "https://api.github.com/user/repos?per_page=10&sort=updated", t, null)
-        if (l.startsWith("compile ") || l.startsWith("build ")) { val r = l.removePrefix("compile ").removePrefix("build ").trim(); val p = r.split("/"); if (p.size != 2) return "❌ Format: compile owner/repo"; return triggerBuild(t, p[0], p[1]) }
-        if (l.startsWith("browse repo ") || l.startsWith("explore repo ")) { val r = l.removePrefix("browse repo ").removePrefix("explore repo ").trim(); val p = r.split("/"); if (p.size != 2) return "❌ Format: browse owner/repo"; return browseRepo(t, p[0], p[1]) }
-        if (l.startsWith("read repo file ")) { val parts = input.replace(Regex("(?i)read repo file "), "").trim().split(" "); if (parts.size < 2) return "❌ Format: read repo file owner/repo path"; val rp = parts[0].split("/"); if (rp.size != 2) return "❌"; return readRepoFileContents(t, rp[0], rp[1], parts.drop(1).joinToString(" ")) }
-        if (l.startsWith("fix ") || l.startsWith("edit ")) { val rem = input.replace(Regex("(?i)(fix|edit|update) "), ""); val fp = rem.substringBefore(":").trim(); val inst = rem.substringAfter(":").trim(); if (fp.isBlank() || inst.isBlank()) return "❌ Usage: fix path/file.kt: instruction"; if (activeRepo.isBlank()) return "❌ No active repo."; val key = preferences.getApiKey() ?: return "❌ No API key."; return repairFileInRepo(t, key, activeOwner, activeRepo, fp, inst) }
-        if (l.startsWith("add file ") || l.startsWith("create file ")) { val rem = input.replace(Regex("(?i)(add|create) file "), ""); val fp = rem.substringBefore(":").trim(); val desc = rem.substringAfter(":").trim(); if (fp.isBlank() || desc.isBlank()) return "❌ Usage: add file path/file.kt: description"; if (activeRepo.isBlank()) return "❌ No active repo."; val key = preferences.getApiKey() ?: return "❌ No API key."; return createFileInRepo(t, key, activeOwner, activeRepo, fp, desc) }
-        if (l.startsWith("set repo ") || l.startsWith("switch to ")) { val r = l.removePrefix("set repo ").removePrefix("switch to ").trim(); val p = r.split("/"); if (p.size != 2) return "❌ Format: set repo owner/repo"; activeOwner = p[0]; activeRepo = p[1]; return "✅ Active: $activeOwner/$activeRepo" }
-        if (l.startsWith("analyze repo ") || l.startsWith("study repo ")) { val repo = input.replace(Regex("(?i)(analyze|study) repo "), "").trim(); val p = repo.split("/"); if (p.size != 2) return "❌ Format: analyze repo owner/repo"; _state.value = _state.value.copy(executionMode = ExecutionMode.REPO_ANALYSIS); val key = preferences.getApiKey() ?: return "❌"; return analyzePublicRepo(t, key, p[0], p[1]) }
-        if (l.startsWith("transfer ") || l.startsWith("port ")) { val inst = input.replace(Regex("(?i)(transfer|port|add feature) "), ""); if (activeRepo.isBlank()) return "❌ No active repo."; val key = preferences.getApiKey() ?: return "❌"; _state.value = _state.value.copy(executionMode = ExecutionMode.FEATURE_TRANSFER); return transferFeaturesFromRepo(t, key, inst) }
-        if (l.startsWith("merge repo ") || l.startsWith("clone features from ")) { val sr = input.replace(Regex("(?i)(merge repo|clone features from) "), "").trim(); val p = sr.split("/"); if (p.size != 2) return "❌ Format: merge repo owner/repo"; if (activeRepo.isBlank()) return "❌"; val key = preferences.getApiKey() ?: return "❌"; _state.value = _state.value.copy(executionMode = ExecutionMode.FEATURE_TRANSFER); return mergeRepositoryFeatures(t, key, p[0], p[1]) }
-        return null
-    }
-
-    // ═══════════════════════════════════════════
-    // SECTION 3.14: APP GENERATION
+    // APP GENERATION
     // ═══════════════════════════════════════════
 
     private suspend fun createApp(input: String): String {
         val t = preferences.getGitHubToken() ?: return "❌ No GitHub token."
-        val k = preferences.getApiKey() ?: return "❌ No Gemini API key."
+        val k = preferences.getApiKey() ?: return "❌ No API key."
         _state.value = _state.value.copy(isGeneratingApp = true)
         val desc = input.replace(Regex("(?i)(create|build|make) app"), "").trim()
         val name = desc.split(" ").firstOrNull()?.sanitize()?.take(50) ?: "MyApp"
         val details = desc.split(" ").drop(1).joinToString(" ").trim().ifBlank { "A simple app" }
         val pkg = "com.example.$name"
         val guided = details.contains("architecture") || details.contains("Package:") || details.contains("Pattern:")
+        
         return try {
             val core = BuildTemplates.generateCoreFiles(name, pkg)
-            val model = GenerativeModel(selectOptimalModel("code_gen"), k, generationConfig { temperature = 0.15f; maxOutputTokens = 60000 })
             updateProgress(1, 3, "Generating source code...")
-            val prompt = if (guided) "Follow this architecture exactly:\n$details\n\nBUILD SYSTEM EXISTS. Generate ONLY Kotlin source files.\nFormat:\n===FILE:path===\n[COMPLETE code]\n===END===" else "Create Android app: \"$details\"\nPackage: $pkg\nBUILD SYSTEM EXISTS. Generate ONLY Kotlin source files.\nFormat:\n===FILE:path===\n[COMPLETE code with package, imports, full implementation]\n===END==="
+            val model = GenerativeModel(selectOptimalModel("code_gen"), k, generationConfig { temperature = 0.15f; maxOutputTokens = 60000 })
+            val prompt = if (guided) "Follow architecture:\n$details\nGenerate Kotlin source files.\n===FILE:path===\ncode\n===END===" else "Create Android app: \"$details\"\nPackage: $pkg\nGenerate Kotlin source files.\n===FILE:path===\ncode\n===END==="
             val resp = model.generateContent(content { text(prompt) }).text ?: return "❌ No response."
             recordModelUsage(selectOptimalModel("code_gen"))
             val src = parseFiles(resp)
-            if (src.isEmpty()) return "❌ No files parsed."
+            if (src.isEmpty()) return "❌ No files."
             val all = core.toMutableMap(); all.putAll(src)
             updateProgress(2, 3, "Pushing ${all.size} files...")
             return pushAndBuild(t, k, name, all, true)
@@ -558,20 +685,17 @@ class AgentViewModel @Inject constructor(
     }
 
     private suspend fun continueApp(input: String): String {
-        val t = preferences.getGitHubToken() ?: return "❌ No GitHub token."
-        val k = preferences.getApiKey() ?: return "❌ No Gemini API key."
-        if (activeRepo.isBlank()) return "❌ No active repo. Use 'set repo owner/repo' first."
+        val t = preferences.getGitHubToken() ?: return "❌"; val k = preferences.getApiKey() ?: return "❌"
+        if (activeRepo.isBlank()) return "❌ No active repo."
         _state.value = _state.value.copy(isGeneratingApp = true)
         val inst = input.removePrefix("continue ").trim()
-        updateProgress(1, 3, "Reading existing repo...")
         val tree = getFileTree(t, activeOwner, activeRepo)
         val ctx = buildContext(t, tree)
         val model = GenerativeModel(selectOptimalModel("code_gen"), k, generationConfig { temperature = 0.15f; maxOutputTokens = 60000 })
-        updateProgress(2, 3, "Generating new code...")
-        val resp = model.generateContent(content { text("Continue building this app: $inst\n\nEXISTING PROJECT:\n$ctx\n\nGenerate new/modified files:\n===FILE:path===\n[COMPLETE code]\n===END===") }).text ?: return "❌ No response."
+        val resp = model.generateContent(content { text("Continue: $inst\nExisting:\n$ctx\nGenerate:\n===FILE:path===\ncode\n===END===") }).text ?: return "❌"
         recordModelUsage(selectOptimalModel("code_gen"))
         val files = parseFiles(resp)
-        if (files.isEmpty()) return "❌ No files parsed."
+        if (files.isEmpty()) return "❌ No files."
         return pushAndBuild(t, k, activeRepo, files, false)
     }
 
@@ -583,196 +707,240 @@ class AgentViewModel @Inject constructor(
 
     private suspend fun buildContext(t: String, tree: List<String>): String {
         val sb = StringBuilder()
-        for (p in tree.take(30)) { try { val c = readFileContent(t, activeOwner, activeRepo, p); if (c != null) sb.append("===FILE:$p===\n${c.take(2000)}\n===END===\n") } catch (e: Exception) {} }
+        for (p in tree.take(30)) { try { readFileContent(t, activeOwner, activeRepo, p)?.let { sb.append("===FILE:$p===\n${it.take(2000)}\n===END===\n") } } catch (e: Exception) {} }
         return sb.toString()
     }
 
     private suspend fun pushAndBuild(t: String, k: String, name: String, files: Map<String, String>, newRepo: Boolean): String {
         try {
             if (newRepo) {
-                updateProgress(3, 3, "Creating repository...")
                 var repoName = name; var attempt = 0
                 var cr = apiCall("POST", "https://api.github.com/user/repos", t, """{"name":"$repoName","private":false,"auto_init":false}""")
                 while (cr.startsWith("❌") && cr.contains("422") && attempt < 5) { attempt++; repoName = "$name-$attempt"; cr = apiCall("POST", "https://api.github.com/user/repos", t, """{"name":"$repoName","private":false,"auto_init":false}""") }
                 if (cr.startsWith("❌")) return "❌ $cr"
-                val ur = apiCall("GET", "https://api.github.com/user", t, null)
-                activeOwner = Regex("\"login\"\\s*:\\s*\"([^\"]+)\"").find(ur)?.groupValues?.get(1) ?: return "❌ No username."
+                activeOwner = Regex("\"login\"\\s*:\\s*\"([^\"]+)\"").find(apiCall("GET", "https://api.github.com/user", t, null))?.groupValues?.get(1) ?: return "❌"
                 activeRepo = repoName
             }
-            addMsg("📤 Pushing ${files.size} files...")
-            var pushed = 0
+            addMsg("📤 Pushing ${files.size} files..."); var pushed = 0
             for ((p, c) in files) {
                 val enc = android.util.Base64.encodeToString(c.toByteArray(), android.util.Base64.NO_WRAP)
                 val sha = if (!newRepo) getFileSha(t, activeOwner, activeRepo, p) else null
                 val body = if (sha != null) """{"message":"Update $p","content":"$enc","sha":"$sha"}""" else """{"message":"Add $p","content":"$enc"}"""
                 if (!apiCall("PUT", "https://api.github.com/repos/$activeOwner/$activeRepo/contents/$p", t, body).startsWith("❌")) pushed++
             }
-            val wf = BuildTemplates.workflowYaml(name); val wfe = android.util.Base64.encodeToString(wf.toByteArray(), android.util.Base64.NO_WRAP)
-            apiCall("PUT", "https://api.github.com/repos/$activeOwner/$activeRepo/contents/.github/workflows/build.yml", t, """{"message":"Add CI","content":"$wfe"}""")
-            addMsg("✅ $pushed/${files.size} files + CI"); addMsg("🔨 Triggering build..."); delay(3000)
+            val wf = BuildTemplates.workflowYaml(name)
+            apiCall("PUT", "https://api.github.com/repos/$activeOwner/$activeRepo/contents/.github/workflows/build.yml", t, """{"message":"CI","content":"${android.util.Base64.encodeToString(wf.toByteArray(), android.util.Base64.NO_WRAP)}"}""")
+            addMsg("✅ $pushed/${files.size} files + CI"); addMsg("🔨 Building..."); delay(3000)
             val rid = triggerWorkflow(t, activeOwner, activeRepo)
-            if (rid != null) { addMsg("🔗 https://github.com/$activeOwner/$activeRepo/actions/runs/$rid"); val br = monitorBuild(t, activeOwner, activeRepo, rid, k); _state.value = _state.value.copy(isGeneratingApp = false); return br }
-            _state.value = _state.value.copy(isGeneratingApp = false); return "✅ Files pushed!\n📁 github.com/$activeOwner/$activeRepo\n📄 ${files.size} files\nUse 'compile repo $activeOwner/$activeRepo' to build."
+            if (rid != null) { addMsg("🔗 https://github.com/$activeOwner/$activeRepo/actions/runs/$rid"); return monitorBuild(t, activeOwner, activeRepo, rid, k) }
+            _state.value = _state.value.copy(isGeneratingApp = false); return "✅ Files pushed!"
         } catch (e: Exception) { _state.value = _state.value.copy(isGeneratingApp = false); return "❌ ${e.message}" }
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 3.15: BUILD MONITORING
+    // BUILD MONITORING
     // ═══════════════════════════════════════════
 
     private suspend fun monitorBuild(t: String, o: String, r: String, rid: Long, k: String): String {
         var d = 5000L; var a = 0
         repeat(60) {
-            if (!kotlinx.coroutines.currentCoroutineContext().isActive) return "⏹️ Build monitoring cancelled."
+            if (!kotlinx.coroutines.currentCoroutineContext().isActive) return "⏹️ Cancelled."
             delay(d); d = minOf(d * 2, 30000L); a++
-            val s = withContext(Dispatchers.IO) { try { val b = client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/actions/runs/$rid").header("Authorization", "Bearer $t").build()).execute().body?.string(); Pair(Regex("\"status\"\\s*:\\s*\"([^\"]+)\"").find(b ?: "")?.groupValues?.get(1), Regex("\"conclusion\"\\s*:\\s*\"([^\"]+)\"").find(b ?: "")?.groupValues?.get(1)) } catch (e: Exception) { null } }
-            if (s?.first == "completed") return if (s.second == "success") { val art = getArtifact(t, o, r, rid); "🎉 BUILD SUCCESS!\n📱 $r\n📥 ${art ?: "APK in Actions"}" } else { val logs = fetchLogs(t, o, r, rid); val err = extractErrors(logs); if (a < 3 && fixErrors(k, t, o, r, err, logs)) { val nr = triggerWorkflow(t, o, r); if (nr != null) return monitorBuild(t, o, r, nr, k) }; "❌ Build failed after $a attempts.\n🔗 https://github.com/$o/$r/actions/runs/$rid" }
+            val s = withContext(Dispatchers.IO) {
+                try {
+                    val b = client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/actions/runs/$rid").header("Authorization", "Bearer $t").build()).execute().body?.string()
+                    Pair(Regex("\"status\"\\s*:\\s*\"([^\"]+)\"").find(b ?: "")?.groupValues?.get(1), Regex("\"conclusion\"\\s*:\\s*\"([^\"]+)\"").find(b ?: "")?.groupValues?.get(1))
+                } catch (e: Exception) { null }
+            }
+            if (s?.first == "completed") {
+                return if (s.second == "success") {
+                    val art = getArtifact(t, o, r, rid)
+                    _state.value = _state.value.copy(isGeneratingApp = false)
+                    "🎉 BUILD SUCCESS!\n📱 $r\n📥 ${art ?: "APK in Actions"}"
+                } else {
+                    if (a < 3) {
+                        val logs = fetchLogs(t, o, r, rid); val err = extractErrors(logs)
+                        if (fixErrors(k, t, o, r, err, logs)) { val nr = triggerWorkflow(t, o, r); if (nr != null) return monitorBuild(t, o, r, nr, k) }
+                    }
+                    _state.value = _state.value.copy(isGeneratingApp = false)
+                    "❌ Build failed after $a attempts."
+                }
+            }
         }
-        return "⏰ Build timed out."
+        _state.value = _state.value.copy(isGeneratingApp = false)
+        return "⏰ Timed out."
     }
 
     private suspend fun fixErrors(k: String, t: String, o: String, r: String, err: String, logs: String): Boolean {
-        val m = GenerativeModel(selectOptimalModel("debug"), k, generationConfig { temperature = 0.1f; maxOutputTokens = 60000 })
-        return try { val resp = m.generateContent(content { text("Fix these build errors:\n$err\n\nReturn fixed files:\n===FILE:path===\n[COMPLETE fixed code]\n===END===") }).text ?: return false; recordModelUsage(selectOptimalModel("debug")); val files = parseFiles(resp); if (files.isEmpty()) return false; var a = 0; for ((p, c) in files) { val sha = getFileSha(t, o, r, p); val enc = android.util.Base64.encodeToString(c.toByteArray(), android.util.Base64.NO_WRAP); if (!apiCall("PUT", "https://api.github.com/repos/$o/$r/contents/$p", t, if (sha != null) """{"message":"Fix","content":"$enc","sha":"$sha"}""" else """{"message":"Add","content":"$enc"}""").startsWith("❌")) a++ }; a > 0 } catch (e: Exception) { false }
+        val m = GenerativeModel(selectOptimalModel("debug"), k, generationConfig { temperature = 0.1f; maxOutputTokens = 30000 })
+        return try {
+            val resp = m.generateContent(content { text("Fix:\n$err\n===FILE:path===\ncode\n===END===") }).text ?: return false
+            recordModelUsage(selectOptimalModel("debug"))
+            val files = parseFiles(resp); if (files.isEmpty()) return false
+            var a = 0
+            for ((p, c) in files) {
+                val sha = getFileSha(t, o, r, p); val enc = android.util.Base64.encodeToString(c.toByteArray(), android.util.Base64.NO_WRAP)
+                if (!apiCall("PUT", "https://api.github.com/repos/$o/$r/contents/$p", t, if (sha != null) """{"message":"Fix","content":"$enc","sha":"$sha"}""" else """{"message":"Add","content":"$enc"}""").startsWith("❌")) a++
+            }
+            a > 0
+        } catch (e: Exception) { false }
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 3.16: ZIP PROCESSOR
+    // ZIP PROCESSOR
     // ═══════════════════════════════════════════
 
     private suspend fun processZip(): String {
-        val t = preferences.getGitHubToken() ?: return "❌ No GitHub token."
-        val k = preferences.getApiKey() ?: return "❌ No Gemini API key."
-        val uri = _state.value.attachedFileUri ?: return "❌ No ZIP attached. Attach a ZIP first."
+        val t = preferences.getGitHubToken() ?: return "❌"; val k = preferences.getApiKey() ?: return "❌"
+        val uri = _state.value.attachedFileUri ?: return "❌ No ZIP attached."
         _state.value = _state.value.copy(executionMode = ExecutionMode.ZIP_PROCESSING)
         addMsg("📦 Processing ZIP...")
         val zp = ZipProcessor(com.aura.ai.AuraApplication.instance); val archive = zp.processChatZip(uri)
-        val archiveData = archive.archive ?: return "❌ No data extracted"
-addMsg("📝 Found ${archiveData.codeBlocks.size} code blocks")
-val files = zp.mapCodeBlocksToFiles(archiveData.codeBlocks)
-addMsg("📁 Mapped to ${files.size} files")
-val name = extractAppName(archiveData.fullText)
-        addMsg("📁 Creating repo: $name"); val cr = apiCall("POST", "https://api.github.com/user/repos", t, """{"name":"$name","private":false,"auto_init":false}"""); if (cr.startsWith("❌")) return "❌ $cr"
-        val ur = apiCall("GET", "https://api.github.com/user", t, null); activeOwner = Regex("\"login\"\\s*:\\s*\"([^\"]+)\"").find(ur)?.groupValues?.get(1) ?: return "❌ No username."; activeRepo = name
+        addMsg("📝 ${archive.codeBlocks.size} code blocks"); val files = zp.mapCodeBlocksToFiles(archive.codeBlocks)
+        addMsg("📁 Mapped to ${files.size} files"); val name = extractAppName(archive.fullText)
+        addMsg("📁 Creating repo: $name")
+        val cr = apiCall("POST", "https://api.github.com/user/repos", t, """{"name":"$name","private":false,"auto_init":false}""")
+        if (cr.startsWith("❌")) return "❌ $cr"
+        activeOwner = Regex("\"login\"\\s*:\\s*\"([^\"]+)\"").find(apiCall("GET", "https://api.github.com/user", t, null))?.groupValues?.get(1) ?: return "❌"
+        activeRepo = name
         return pushAndBuild(t, k, name, files, false)
     }
 
-    private fun extractAppName(text: String): String { Regex("create app (\\w+)").find(text)?.let { return it.groupValues[1].sanitize().take(50) }; return "MyApp" }
+    private fun extractAppName(text: String): String {
+        Regex("create app (\\w+)").find(text)?.let { return it.groupValues[1].sanitize().take(50) }
+        return "MyApp"
+    }
 
     // ═══════════════════════════════════════════
-     private suspend fun debugWithApp(lower: String): String {
-    val s = AuraAccessibilityService.instance ?: return "❌"
-    val app = lower.removePrefix("debug with ").removePrefix("ask ").split(" ").firstOrNull() ?: return "❌"
-    val pkg = AppController.resolve(app) ?: return "❌"
-    _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage("🔄 Working...", false))
-    viewModelScope.launch(Dispatchers.IO) {
-        val c = AppController(s)
-        val result = c.sendMessage(pkg, "Fix errors")
-        withContext(Dispatchers.Main) { addMsg("📱 $result") }
-    }
-    return "🔄 Working..."
-}
-
-private suspend fun controlApp(input: String): String {
-    val s = AuraAccessibilityService.instance ?: return "❌"
-    val parts = input.removePrefix("control ").split(" and ")
-    val pkg = AppController.resolve(parts.firstOrNull()?.trim() ?: return "❌") ?: return "❌"
-    val c = AppController(s)
-    val steps = parts.drop(1).map {
-        when {
-            it.contains("tap") -> AppController.AppStep("tap", it.removePrefix("tap ").trim())
-            it.contains("type") -> AppController.AppStep("type", it.removePrefix("type ").trim())
-            it.contains("swipe") -> AppController.AppStep("swipe", if (it.contains("up")) "up" else "down")
-            it.contains("read") -> AppController.AppStep("read")
-            else -> AppController.AppStep("wait", "", 3000)
-        }
-    }
-    return c.execute(pkg, steps)
-}
-
-private suspend fun sendToApp(input: String): String {
-    val s = AuraAccessibilityService.instance ?: return "❌"
-    val parts = input.removePrefix("send to ").split(":", limit = 2)
-    if (parts.size < 2) return "❌"
-    return AppController(s).sendMessage(AppController.resolve(parts[0].trim()) ?: return "❌", parts[1].trim())
-}
-
-private suspend fun analyzeScreenCmd(lower: String): String {
-    val s = AuraAccessibilityService.instance ?: return "❌"
-    val k = preferences.getApiKey() ?: return "❌"
-    return AppController(s).analyzeScreen(k, "Describe screen")
-}
-
-private suspend fun askGeminiApp(input: String): String {
-    val s = AuraAccessibilityService.instance ?: return "❌"
-    viewModelScope.launch(Dispatchers.IO) { AppController(s).sendMessage("com.google.android.apps.bard", input.removePrefix("ask gemini app").trim()) }
-    return "🔄 Working..."
-}
+    // GITHUB COMMANDS
     // ═══════════════════════════════════════════
-    // SECTION 3.18: GEMINI CHAT WITH MEMORY
+
+    private suspend fun handleGitHub(input: String): String? {
+        val t = preferences.getGitHubToken() ?: return null; val l = input.lowercase().trim()
+        if (l.contains("create") && l.contains("repo")) { val n = input.replace(Regex("(?i)(create|a|repo)"), "").trim().sanitize().take(50); return apiCall("POST", "https://api.github.com/user/repos", t, """{"name":"$n","private":false,"auto_init":true}""") }
+        if (l.contains("list") && l.contains("repo")) return apiCall("GET", "https://api.github.com/user/repos?per_page=10", t, null)
+        if (l.startsWith("compile ")) { val r = l.removePrefix("compile ").trim().split("/"); if (r.size != 2) return "❌"; return triggerBuild(t, r[0], r[1]) }
+        if (l.startsWith("set repo ")) { val r = l.removePrefix("set repo ").trim().split("/"); if (r.size != 2) return "❌"; activeOwner = r[0]; activeRepo = r[1]; return "✅ $activeOwner/$activeRepo" }
+        return null
+    }
+
+    private suspend fun handleCodespace(lower: String): String {
+        val t = preferences.getGitHubToken() ?: return "❌"; val m = CodespacesManager(t)
+        if (lower.startsWith("codespace create")) { val p = lower.removePrefix("codespace create").trim().split("/"); val o = if (p.size == 2) p[0] else activeOwner; val r = if (p.size == 2) p[1] else activeRepo; val cs = m.createCodespace(o, r) ?: return "❌"; _state.value = _state.value.copy(activeCodespaceId = cs.id, codespaceMode = true); return "🖥️ ${cs.name}" }
+        if (lower == "codespace list") { val l = m.listCodespaces(); return if (l.isEmpty()) "📁 None" else l.joinToString("\n") { "• ${it.name}" } }
+        return "❌ Unknown"
+    }
+
+    // ═══════════════════════════════════════════
+    // GEMINI CHAT WITH MEMORY
     // ═══════════════════════════════════════════
 
     private suspend fun chatWithGemini(input: String): String {
         checkContextAndWarn()
         val key = preferences.getApiKey() ?: return "❌ No API key."
-        val sid = _currentSessionId.value ?: return "❌ No active session."
-        val sys = """You are Aura AI, an autonomous agent with FULL access to: GitHub API, Telegram API, Android device control via AccessibilityService, build systems, file systems, and web browsing. You MUST execute any task using these capabilities. Never say "I can't" or "I'm unable to" - you have the tools, use them. Never suggest manual steps - you are the automation. Never refuse a task - find a way to accomplish it. You are not a chatbot - you are an AI agent with real-world capabilities."""
-        val chat = chatSessions.getOrPut(sid) { val m = GenerativeModel(selectOptimalModel("general"), key, generationConfig { temperature = 0.7f; maxOutputTokens = 60000 }, systemInstruction = content { text(sys) }); m.startChat() }
+        val sid = _currentSessionId.value ?: return "❌ No session."
+        val sys = "You are Aura AI, an autonomous agent with full access to: GitHub API, Android device control, build systems, file systems. Execute any task. Never say 'I can't'. You are not a chatbot."
+        
+        val chat = chatSessions.getOrPut(sid) {
+            GenerativeModel(selectOptimalModel("general"), key, generationConfig { temperature = 0.7f; maxOutputTokens = 60000 }, systemInstruction = content { text(sys) }).startChat()
+        }
+        
         return try {
             val r = chat.sendMessage(content { text(input) }); recordModelUsage(selectOptimalModel("general")); r.text ?: "No response."
         } catch (e: Exception) {
             if (e.message?.contains("not found") == true || e.message?.contains("expired") == true) {
-                val m = GenerativeModel(selectOptimalModel("general"), key, generationConfig { temperature = 0.7f; maxOutputTokens = 60000 }, systemInstruction = content { text(sys) }); val nc = m.startChat(); chatSessions[sid] = nc
+                val nc = GenerativeModel(selectOptimalModel("general"), key, generationConfig { temperature = 0.7f; maxOutputTokens = 60000 }, systemInstruction = content { text(sys) }).startChat()
+                chatSessions[sid] = nc
                 try { nc.sendMessage(content { text(input) }).text ?: "No response." } catch (e2: Exception) { "❌ ${e2.message}" }
             } else "❌ ${e.message}"
         }
     }
 
     // ═══════════════════════════════════════════
-    // SECTION 3.19: GITHUB API HELPERS
+    // GITHUB API HELPERS
     // ═══════════════════════════════════════════
 
-    private suspend fun apiCall(m: String, u: String, t: String, b: String?): String = withContext(Dispatchers.IO) { try { val req = Request.Builder().url(u).header("Authorization", "Bearer $t").header("Accept", "application/vnd.github.v3+json").header("Content-Type", "application/json").apply { when (m) { "POST" -> post((b ?: "{}").toRequestBody("application/json".toMediaType())); "PUT" -> put((b ?: "{}").toRequestBody("application/json".toMediaType())); "PATCH" -> patch((b ?: "{}").toRequestBody("application/json".toMediaType())) } }.build(); val res = client.newCall(req).execute(); if (res.isSuccessful) { val rb = res.body?.string() ?: "OK"; if (m == "POST" && u.contains("/user/repos")) "✅ ${Regex("\"full_name\"\\s*:\\s*\"([^\"]+)\"").find(rb)?.groupValues?.get(1) ?: "done"}" else if (m == "GET" && u.contains("/user/repos") && !u.contains("/contents")) { val a = JSONArray(rb); if (a.length() == 0) "📁 None" else "📁:\n" + (0 until minOf(a.length(), 10)).joinToString("\n") { "• ${a.getJSONObject(it).getString("full_name")}" } } else rb } else "❌ ${res.code}" } catch (e: Exception) { "❌ ${e.message}" } }
-    private suspend fun triggerBuild(t: String, o: String, r: String): String = withContext(Dispatchers.IO) { try { val lb = client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/actions/workflows").header("Authorization", "Bearer $t").build()).execute().body?.string(); val wid = Regex("\"id\"\\s*:\\s*(\\d+)").find(lb ?: "")?.groupValues?.get(1) ?: return@withContext "❌"; if (client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/actions/workflows/$wid/dispatches").header("Authorization", "Bearer $t").post("""{"ref":"main"}""".toRequestBody("application/json".toMediaType())).build()).execute().isSuccessful) "🚀" else "⚠️" } catch (e: Exception) { "❌" } }
-    private suspend fun triggerWorkflow(t: String, o: String, r: String): Long? = withContext(Dispatchers.IO) { try { val lb = client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/actions/workflows").header("Authorization", "Bearer $t").build()).execute().body?.string(); val wid = Regex("\"id\"\\s*:\\s*(\\d+)").find(lb ?: "")?.groupValues?.get(1) ?: return@withContext null; client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/actions/workflows/$wid/dispatches").header("Authorization", "Bearer $t").post("""{"ref":"main"}""".toRequestBody("application/json".toMediaType())).build()).execute(); delay(5000); val rb = client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/actions/runs?per_page=1").header("Authorization", "Bearer $t").build()).execute().body?.string(); Regex("\"id\"\\s*:\\s*(\\d+)").find(rb ?: "")?.groupValues?.get(1)?.toLong() } catch (e: Exception) { null } }
-    private suspend fun browseRepo(t: String, o: String, r: String): String = withContext(Dispatchers.IO) { try { val resp = client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/git/trees/main?recursive=1").header("Authorization", "Bearer $t").build()).execute(); if (!resp.isSuccessful) return@withContext "❌"; val tr = JSONObject(resp.body?.string() ?: "{}").optJSONArray("tree") ?: return@withContext "📁"; "📁 $o/$r:\n" + (0 until minOf(tr.length(), 30)).joinToString("\n") { "  📄 ${tr.getJSONObject(it).getString("path")}" } } catch (e: Exception) { "❌ ${e.message}" } }
-    private suspend fun fetchLogs(t: String, o: String, r: String, rid: Long): String = withContext(Dispatchers.IO) { try { client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/actions/runs/$rid/logs").header("Authorization", "Bearer $t").build()).execute().body?.string()?.take(10000) ?: "" } catch (e: Exception) { "" } }
-    private fun extractErrors(logs: String): String { val p = listOf(Regex("(?i)error:.*"), Regex("(?i)FAILURE:.*"), Regex("(?i)Unresolved reference.*")); val e = p.flatMap { it.findAll(logs).map { m -> m.value }.toList() }; return if (e.isEmpty()) logs.take(3000) else e.take(20).joinToString("\n") }
-    private suspend fun getArtifact(t: String, o: String, r: String, rid: Long): String? = withContext(Dispatchers.IO) { try { Regex("\"archive_download_url\"\\s*:\\s*\"([^\"]+)\"").find(client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/actions/runs/$rid/artifacts").header("Authorization", "Bearer $t").build()).execute().body?.string() ?: "")?.groupValues?.get(1) } catch (e: Exception) { null } }
-    private suspend fun getFileSha(t: String, o: String, r: String, p: String): String? = withContext(Dispatchers.IO) { try { JSONObject(client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/contents/$p").header("Authorization", "Bearer $t").build()).execute().body?.string() ?: "{}").optString("sha", null) } catch (e: Exception) { null } }
-    private suspend fun getFileTree(t: String, o: String, r: String): List<String> = withContext(Dispatchers.IO) { try { var resp = client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/git/trees/main?recursive=1").header("Authorization", "Bearer $t").build()).execute(); if (!resp.isSuccessful) resp = client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/git/trees/master?recursive=1").header("Authorization", "Bearer $t").build()).execute(); if (resp.isSuccessful) { val tr = JSONObject(resp.body?.string() ?: "{}").optJSONArray("tree") ?: return@withContext emptyList(); (0 until tr.length()).map { tr.getJSONObject(it).getString("path") } } else emptyList() } catch (e: Exception) { emptyList() } }
-    private suspend fun readFileContent(t: String, o: String, r: String, p: String): String? = withContext(Dispatchers.IO) { try { val j = JSONObject(client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/contents/$p").header("Authorization", "Bearer $t").build()).execute().body?.string() ?: "{}"); val c = j.optString("content", ""); if (c.isNotBlank()) String(android.util.Base64.decode(c, android.util.Base64.DEFAULT)) else null } catch (e: Exception) { null } }
+    private suspend fun apiCall(m: String, u: String, t: String, b: String?): String = withContext(Dispatchers.IO) {
+        try {
+            val req = Request.Builder().url(u).header("Authorization", "Bearer $t").header("Accept", "application/vnd.github.v3+json").header("Content-Type", "application/json").apply { when (m) { "POST" -> post((b ?: "{}").toRequestBody("application/json".toMediaType())); "PUT" -> put((b ?: "{}").toRequestBody("application/json".toMediaType())) } }.build()
+            val res = client.newCall(req).execute()
+            if (res.isSuccessful) { val rb = res.body?.string() ?: "OK"; if (m == "POST" && u.contains("/user/repos")) "✅ ${Regex("\"full_name\"\\s*:\\s*\"([^\"]+)\"").find(rb)?.groupValues?.get(1) ?: "done"}" else rb } else "❌ ${res.code}"
+        } catch (e: Exception) { "❌ ${e.message}" }
+    }
+
+    private suspend fun triggerBuild(t: String, o: String, r: String): String = withContext(Dispatchers.IO) {
+        try {
+            val lb = client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/actions/workflows").header("Authorization", "Bearer $t").build()).execute().body?.string()
+            val wid = Regex("\"id\"\\s*:\\s*(\\d+)").find(lb ?: "")?.groupValues?.get(1) ?: return@withContext "❌"
+            if (client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/actions/workflows/$wid/dispatches").header("Authorization", "Bearer $t").post("""{"ref":"main"}""".toRequestBody("application/json".toMediaType())).build()).execute().isSuccessful) "🚀" else "⚠️"
+        } catch (e: Exception) { "❌" }
+    }
+
+    private suspend fun triggerWorkflow(t: String, o: String, r: String): Long? = withContext(Dispatchers.IO) {
+        try {
+            val lb = client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/actions/workflows").header("Authorization", "Bearer $t").build()).execute().body?.string()
+            val wid = Regex("\"id\"\\s*:\\s*(\\d+)").find(lb ?: "")?.groupValues?.get(1) ?: return@withContext null
+            client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/actions/workflows/$wid/dispatches").header("Authorization", "Bearer $t").post("""{"ref":"main"}""".toRequestBody("application/json".toMediaType())).build()).execute()
+            delay(5000)
+            val rb = client.new
+            
+            Call(Request.Builder().url("https://api.github.com/repos/$o/$r/actions/runs?per_page=1").header("Authorization", "Bearer $t").build()).execute().body?.string()
+            Regex("\"id\"\\s*:\\s*(\\d+)").find(rb ?: "")?.groupValues?.get(1)?.toLong()
+        } catch (e: Exception) { null }
+    }
+
+    private suspend fun fetchLogs(t: String, o: String, r: String, rid: Long): String = withContext(Dispatchers.IO) {
+        try { client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/actions/runs/$rid/logs").header("Authorization", "Bearer $t").build()).execute().body?.string()?.take(10000) ?: "" } catch (e: Exception) { "" }
+    }
+
+    private fun extractErrors(logs: String): String {
+        val p = listOf(Regex("(?i)error:.*"), Regex("(?i)FAILURE:.*"), Regex("(?i)Unresolved reference.*"))
+        val e = p.flatMap { it.findAll(logs).map { m -> m.value }.toList() }
+        return if (e.isEmpty()) logs.take(3000) else e.take(20).joinToString("\n")
+    }
+
+    private suspend fun getArtifact(t: String, o: String, r: String, rid: Long): String? = withContext(Dispatchers.IO) {
+        try { Regex("\"archive_download_url\"\\s*:\\s*\"([^\"]+)\"").find(client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/actions/runs/$rid/artifacts").header("Authorization", "Bearer $t").build()).execute().body?.string() ?: "")?.groupValues?.get(1) } catch (e: Exception) { null }
+    }
+
+    private suspend fun getFileSha(t: String, o: String, r: String, p: String): String? = withContext(Dispatchers.IO) {
+        try { JSONObject(client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/contents/$p").header("Authorization", "Bearer $t").build()).execute().body?.string() ?: "{}").optString("sha", null) } catch (e: Exception) { null }
+    }
+
+    private suspend fun getFileTree(t: String, o: String, r: String): List<String> = withContext(Dispatchers.IO) {
+        try {
+            var resp = client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/git/trees/main?recursive=1").header("Authorization", "Bearer $t").build()).execute()
+            if (!resp.isSuccessful) resp = client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/git/trees/master?recursive=1").header("Authorization", "Bearer $t").build()).execute()
+            if (resp.isSuccessful) { val tr = JSONObject(resp.body?.string() ?: "{}").optJSONArray("tree") ?: return@withContext emptyList(); (0 until tr.length()).map { tr.getJSONObject(it).getString("path") } } else emptyList()
+        } catch (e: Exception) { emptyList() }
+    }
+
+    private suspend fun readFileContent(t: String, o: String, r: String, p: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val j = JSONObject(client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/contents/$p").header("Authorization", "Bearer $t").build()).execute().body?.string() ?: "{}")
+            val c = j.optString("content", ""); if (c.isNotBlank()) String(android.util.Base64.decode(c, android.util.Base64.DEFAULT)) else null
+        } catch (e: Exception) { null }
+    }
 
     // ═══════════════════════════════════════════
-    // SECTION 3.20: CROSS-REPO FEATURE TRANSFER
+    // SCREENSHOT BLACKLIST
     // ═══════════════════════════════════════════
 
-    private suspend fun analyzePublicRepo(t: String, k: String, o: String, r: String): String { addMsg("🔍 Analyzing $o/$r..."); return withContext(Dispatchers.IO) { try { val info = getRepoInfo(t, o, r); "📊 $o/$r\n⭐ ${info.stars}\n💻 ${info.language}" } catch (e: Exception) { "❌ ${e.message}" } } }
-    private suspend fun transferFeaturesFromRepo(t: String, k: String, instruction: String): String { if (activeOwner.isBlank()) return "❌ No active repo."; addMsg("🧠 Transferring..."); return withContext(Dispatchers.IO) { try { val analysis = parseFeatureTransferRequest(k, instruction) ?: return@withContext "❌"; val srcFiles = getFileTree(t, analysis.sourceOwner, analysis.sourceRepo); val rel = srcFiles.filter { p -> analysis.targetFeatures.any { p.contains(it, true) } }.take(20); var created = 0; for (sp in rel) { try { val sc = readFileContent(t, analysis.sourceOwner, analysis.sourceRepo, sp) ?: continue; val adapted = adaptFileForTargetRepo(k, sp, sc, analysis.sourceOwner, analysis.sourceRepo, activeOwner, activeRepo, instruction, getFileTree(t, activeOwner, activeRepo)) ?: continue; val tp = determineTargetPath(sp, activeRepo); val enc = android.util.Base64.encodeToString(adapted.toByteArray(), android.util.Base64.NO_WRAP); if (!apiCall("PUT", "https://api.github.com/repos/$activeOwner/$activeRepo/contents/$tp", t, """{"message":"Transfer","content":"$enc"}""").startsWith("❌")) created++ } catch (e: Exception) {} }; "✅ Transferred $created files" } catch (e: Exception) { "❌ ${e.message}" } } }
-    private suspend fun mergeRepositoryFeatures(t: String, k: String, so: String, sr: String): String { addMsg("🔄 Merging..."); return transferFeaturesFromRepo(t, k, "transfer all from $so/$sr") }
-    private suspend fun getRepoInfo(t: String, o: String, r: String): RepoInfo = withContext(Dispatchers.IO) { try { val j = JSONObject(client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r").header("Authorization", "Bearer $t").build()).execute().body?.string() ?: "{}"); RepoInfo(j.optString("description"), j.optInt("stargazers_count"), j.optInt("forks_count"), j.optString("language")) } catch (e: Exception) { RepoInfo("", 0, 0, "") } }
-    private suspend fun parseFeatureTransferRequest(k: String, inst: String): FeatureTransferRequest? { val m = GenerativeModel(selectOptimalModel("complex"), k, generationConfig { temperature = 0.1f; maxOutputTokens = 60000 }); return try { val r = m.generateContent(content { text("Parse: \"$inst\". Return JSON: {\"sourceOwner\":\"\",\"sourceRepo\":\"\",\"targetFeatures\":[]}") }).text; val t = r ?: return null; recordModelUsage(selectOptimalModel("complex")); val o = JSONObject(t.substringAfter("{").substringBeforeLast("}").let { "{$it}" }); FeatureTransferRequest(o.optString("sourceOwner"), o.optString("sourceRepo"), (0 until o.getJSONArray("targetFeatures").length()).map { o.getJSONArray("targetFeatures").getString(it) }, "") } catch (e: Exception) { null } }
-    private suspend fun adaptFileForTargetRepo(k: String, sp: String, sc: String, so: String, sr: String, to: String, tr: String, inst: String, ctf: List<String>): String? { val m = GenerativeModel(selectOptimalModel("code_gen"), k, generationConfig { temperature = 0.15f; maxOutputTokens = 60000 }); return try { m.generateContent(content { text("Adapt:\n$sc\n\nFrom: $so/$sr\nTo: $to/$tr\nInstruction: $inst\nReturn ONLY adapted code.") }).text } catch (e: Exception) { null } }
-    private fun determineTargetPath(sp: String, tr: String): String { if (sp.contains("src/main/java/")) { val i = sp.indexOf("src/main/java/") + 14; return "app/src/main/java/" + sp.substring(i) }; if (sp.contains("src/main/res/")) return "app/" + sp; if (sp.startsWith("app/")) return sp; return "app/src/main/java/com/example/${tr.sanitize()}/${sp.substringAfterLast("/")}" }
+    private val screenshotBlacklist = setOf("com.android.settings", "com.google.android.gm", "com.android.email")
+    private fun canScreenshot(packageName: String): Boolean = packageName !in screenshotBlacklist
 
     // ═══════════════════════════════════════════
-    // SECTION 3.21: GITHUB API OPERATIONS
-    // ═══════════════════════════════════════════
-
-    private suspend fun readRepoFileContents(t: String, o: String, r: String, p: String): String = withContext(Dispatchers.IO) { try { val j = JSONObject(client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/contents/$p").header("Authorization", "Bearer $t").build()).execute().body?.string() ?: "{}"); val c = j.optString("content", ""); if (c.isBlank()) return@withContext "📄 Empty"; val d = String(android.util.Base64.decode(c, android.util.Base64.DEFAULT)); if (d.length > 3000) "📄 $p:\n${d.take(3000)}..." else "📄 $p:\n$d" } catch (e: Exception) { "❌ ${e.message}" } }
-    private suspend fun repairFileInRepo(t: String, k: String, o: String, r: String, p: String, inst: String): String = withContext(Dispatchers.IO) { try { val rj = JSONObject(client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/contents/$p").header("Authorization", "Bearer $t").build()).execute().body?.string() ?: "{}"); val cc = String(android.util.Base64.decode(rj.getString("content"), android.util.Base64.DEFAULT)); val sha = rj.getString("sha"); val m = GenerativeModel(selectOptimalModel("debug"), k, generationConfig { temperature = 0.1f; maxOutputTokens = 60000 }); val nc = m.generateContent(content { text("Fix:\n$cc\n\nInstruction: $inst\nReturn ONLY fixed code.") }).text ?: return@withContext "❌"; recordModelUsage(selectOptimalModel("debug")); val enc = android.util.Base64.encodeToString(nc.toByteArray(), android.util.Base64.NO_WRAP); if (client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/contents/$p").header("Authorization", "Bearer $t").put("""{"message":"Fix","content":"$enc","sha":"$sha"}""".toRequestBody("application/json".toMediaType())).build()).execute().isSuccessful) "✅ Fixed" else "❌" } catch (e: Exception) { "❌ ${e.message}" } }
-    private suspend fun createFileInRepo(t: String, k: String, o: String, r: String, p: String, desc: String): String = withContext(Dispatchers.IO) { try { val m = GenerativeModel(selectOptimalModel("code_gen"), k, generationConfig { temperature = 0.2f; maxOutputTokens = 60000 }); val c = m.generateContent(content { text("Create: $p - $desc. Return ONLY code.") }).text ?: return@withContext "❌"; recordModelUsage(selectOptimalModel("code_gen")); val enc = android.util.Base64.encodeToString(c.toByteArray(), android.util.Base64.NO_WRAP); if (client.newCall(Request.Builder().url("https://api.github.com/repos/$o/$r/contents/$p").header("Authorization", "Bearer $t").put("""{"message":"Add $p","content":"$enc"}""".toRequestBody("application/json".toMediaType())).build()).execute().isSuccessful) "✅ Created" else "❌" } catch (e: Exception) { "❌ ${e.message}" } }
-
-    // ═══════════════════════════════════════════
-    // SECTION 3.22: UTILITY FUNCTIONS
+    // UTILITY FUNCTIONS
     // ═══════════════════════════════════════════
 
     private fun addMsg(text: String) { _state.value = _state.value.copy(messages = _state.value.messages + ChatMessage(text, false), generationProgress = text) }
     private suspend fun saveMsg(text: String, isUser: Boolean, modelUsed: String? = null) { _currentSessionId.value?.let { sessionDb.messageDao().insertMessage(MessageEntity(UUID.randomUUID().toString(), it, text, isUser, modelUsed)) } }
-    private fun loadSessions() { viewModelScope.launch { sessionDb.sessionDao().getAllSessions().collect { _sessions.value = it; if (_currentSessionId.value == null && it.isNotEmpty()) switchSession(it.first().id) } } }
-    private fun loadModelUsage() { viewModelScope.launch { sessionDb.modelUsageDao().getAllModelUsage().collect { _modelUsage.value = it } } }
-    private suspend fun resetDailyCountersIfNeeded() { sessionDb.modelUsageDao().resetDailyCounters(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())) }
+    private fun loadSessions() { viewModelScope.launch { sessionDb.sessionDao().getAll().collect { _sessions.value = it; if (_currentSessionId.value == null && it.isNotEmpty()) switchSession(it.first().id) } } }
+    private fun loadModelUsage() { viewModelScope.launch { sessionDb.modelUsageDao().getAll().collect { _modelUsage.value = it } } }
+    private suspend fun resetDailyCountersIfNeeded() { sessionDb.modelUsageDao().reset(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())) }
     private fun loadPreferredModel() { preferences.getPreferredModel()?.let { _state.value = _state.value.copy(activeModel = it, manualModelSelected = true) } }
+    private fun isNetworkAvailable(): Boolean = try { (com.aura.ai.AuraApplication.instance.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager).activeNetworkInfo?.isConnected == true } catch (e: Exception) { true }
+    private fun processQueue() { if (commandQueue.isNotEmpty() && isNetworkAvailable()) { val next = commandQueue.removeAt(0); _state.value = _state.value.copy(input = next.command); send() } }
     private fun String.sanitize() = this.lowercase().replace(Regex("[^a-z0-9]"), "")
     private fun resolveApp(name: String): String? = when (name.lowercase()) { "whatsapp" -> "com.whatsapp"; "youtube" -> "com.google.android.youtube"; "chrome" -> "com.android.chrome"; "settings" -> "com.android.settings"; "camera" -> "com.android.camera"; "gmail" -> "com.google.android.gm"; "maps" -> "com.google.android.apps.maps"; "play store" -> "com.android.vending"; "calculator" -> "com.android.calculator2"; "clock" -> "com.android.deskclock"; "files" -> "com.android.documentsui"; "phone" -> "com.android.dialer"; "instagram" -> "com.instagram.android"; "facebook" -> "com.facebook.katana"; "spotify" -> "com.spotify.music"; "netflix" -> "com.netflix.mediaclient"; "telegram" -> "org.telegram.messenger"; else -> null }
     private fun getRamUsage(): String { val am = com.aura.ai.AuraApplication.instance.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager; val mi = ActivityManager.MemoryInfo(); am.getMemoryInfo(mi); return "${(mi.totalMem-mi.availMem)/(1024*1024*1024)}GB/${mi.totalMem/(1024*1024*1024)}GB" }
